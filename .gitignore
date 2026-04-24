@@ -1,0 +1,29 @@
+# --- Python specific ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+
+# --- IDEs / Editors ---
+.vscode/
+.idea/
+.nvim/
+pyrightconfig.json
+.project
+.pydevproject
+
+# --- BIAI / NEAT specific ---
+# NEAT generuje "checkpointy" (zapisy stanu ewolucji), 
+# nie chcemy ich wszystkich na GitHubie.
+neat-checkpoint-*
+
+# --- Logs & OS specific ---
+*.log
+.DS_Store
+Thumbs.db
