@@ -23,6 +23,7 @@ class Drone:
 
         self.hover_frames: int = 0
         self.idle_frames: int = 0
+        self.frames_without_progress: int = 0
         self.initial_dist: float = 0
         self.min_dist: float = 0
         self.has_touched_target: bool = False
@@ -91,7 +92,7 @@ class Drone:
                     found = True
                     break
 
-                d += 5.0
+                d += 7.5
 
             if not found:
                 distances.append(self.max_sensor_dist)

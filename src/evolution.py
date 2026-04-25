@@ -13,10 +13,11 @@ pygame.font.init()
 STAT_FONT = pygame.font.SysFont("arial", 50)
 
 show_simulation = True
-EVOLUTION_CYCLES = 500
-SIMULATION_TIME = 25
+EVOLUTION_CYCLES = 250
+SIMULATION_TIME = 10
 TARGET_SIZE = 50
 BASE_CRASH_PENALTY = 20.0
+stagnation_limit = FPS * 2.5
 
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I GRAFIKA)
@@ -237,8 +238,14 @@ def eval_genomes(genomes, config) -> None:
             if dist < drone.min_dist:
                 # Im trudniejsza generacja, tym więcej wart każdy piksel zbliżenia
                 improvement = drone.min_dist - dist
-                ge[i].fitness += improvement * 0.5 * difficulty_multiplier * time_decay
+                if improvement > 0.5:
+                    drone.frames_without_progress = 0  # Reset licznika
+                    ge[i].fitness += (
+                        improvement * 0.5 * difficulty_multiplier * time_decay
+                    )
                 drone.min_dist = dist
+            else:
+                drone.frames_without_progress += 1
 
             # --- FITNESS: Kolizje (Proporcjonalne) ---
             hit_wall, hit_obstacle = check_collisions(drone, obstacles)
@@ -272,7 +279,16 @@ def eval_genomes(genomes, config) -> None:
                         ge[i].fitness += (max_frames - frames) * 2
                         drones_to_remove.append(i)
                 else:
+                    if drone.frames_without_progress > stagnation_limit:
+                        ge[i].fitness *= 0.9
+                        drones_to_remove.append(i)
+                        continue  # Przejdź do następnego drona
                     drone.hover_frames = 0
+
+                if (
+                    ge[i].fitness < 10.0
+                ):  # Jeśli roztrwonił prawie cały startowy kapitał
+                    drones_to_remove.append(i)
 
         for i in reversed(drones_to_remove):
             remove_drone(i, drones, nets, ge)
