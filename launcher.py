@@ -47,8 +47,15 @@ def main():
     # 4. Uruchomienie gry
     print("Starting simulation...")
     try:
-        # Tutaj nie używamy run_command, bo chcemy, żeby gra działała normalnie
-        _ = subprocess.run([python_exe, "-m", "src.main"], check=True)
+        # Pobieramy argumenty przekazane do launchera (z pominięciem "launcher.py")
+        args_to_pass = sys.argv[1:]
+
+        # Łączymy komendę odpalającą maina z przekazanymi argumentami
+        command = [python_exe, "-m", "src.main"] + args_to_pass
+
+        # Uruchamiamy proces
+        _ = subprocess.run(command, check=True)
+
     except subprocess.CalledProcessError:
         print("\nSimulation closed with an error or interrupted.")
     except KeyboardInterrupt:

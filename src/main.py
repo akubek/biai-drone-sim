@@ -1,29 +1,68 @@
 import os
+import argparse
 import sys
 
 from src import evolution
 
 
 def main() -> None:
-    print("🚀 Inicjalizacja środowiska BIAI...")
+    parser = argparse.ArgumentParser(description="BIAI Drone Sim - Ewolucja NEAT")
 
-    # Ponieważ main.py jest w folderze 'src', musimy wskazać plik config jeden folder wyżej ('..')
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(current_dir, "..", "config-feedforward.txt")
+    # Dodajemy flagę --replay-best (jeśli podana, wartość to True, domyślnie False)
+    parser.add_argument(
+        "--replay-best",
+        action="store_true",
+        help="Odtwórz najlepszego drona zamiast rozpoczynać nowy trening.",
+    )
 
-    # Zabezpieczenie: sprawdzamy, czy plik na pewno tam jest
-    if not os.path.exists(config_path):
-        print(
-            f"❌ BŁĄD: Nie znaleziono pliku konfiguracyjnego pod adresem:\n{config_path}"
-        )
-        print(
-            "Upewnij się, że plik 'config-feedforward.txt' znajduje się w głównym folderze projektu."
-        )
-        sys.exit(1)
+    # Dodajemy opcjonalny argument na nazwę pliku (przydatne, jak masz kilka modeli)
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="best_drone.pkl",
+        help="Ścieżka do pliku z zapisanym modelem (domyślnie: best_drone.pkl)",
+    )
 
-    # Odpalamy "mózg" projektu!
-    print("🧠 Uruchamianie algorytmu genetycznego NEAT...")
-    evolution.run_neat(config_path)
+    parser.add_argument(
+        "--resume",
+        type=str,
+        nargs="?",
+        const="latest",
+        help="Wznów trening z checkpointu. Możesz podać nazwę pliku lub zostawić puste dla najnowszego.",
+    )
+
+    # Odczytujemy to, co użytkownik wpisał w terminalu
+    args = parser.parse_args()
+
+    # --- 2. Ścieżki do plików ---
+    local_dir = os.path.dirname(__file__)
+    config_path = os.path.join(local_dir, "../config-feedforward.txt")
+
+    # --- 3. Logika wyboru trybu ---
+    if args.replay_best:
+        print(f"TRYB POKAZOWY: Uruchamianie zapisanego drona z pliku '{args.model}'...")
+
+        # Zabezpieczenie: sprawdzamy czy plik w ogóle istnieje
+        if not os.path.exists(args.model):
+            print(f"❌ BŁĄD: Nie znaleziono pliku '{args.model}'!")
+            print(
+                "Najpierw musisz wytrenować drona uruchamiając program bez flagi --replay-best."
+            )
+            sys.exit(1)
+
+        evolution.test_best_drone(config_path, genome_path=args.model)
+    elif args.resume:
+        # Logika wznawiania
+        checkpoint_file = args.resume
+        if checkpoint_file == "latest":
+            # Tu można by dodać logikę szukania pliku z najwyższym numerem,
+            # ale na razie załóżmy, że podajesz nazwę lub używasz domyślnej
+            print("Wznawianie z najnowszego dostępnego checkpointu...")
+
+        evolution.run_neat(config_path, checkpoint=checkpoint_file)
+    else:
+        print("TRYB TRENINGU: Rozpoczynanie ewolucji NEAT...")
+        evolution.run_neat(config_path)
 
 
 if __name__ == "__main__":
