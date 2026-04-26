@@ -23,10 +23,10 @@ class Drone:
         drag_coeff: float = 0.5,  # [kg/s]        angular_drag: float = 0.0,
         angular_drag: float = 0.05,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
         # sensor parameters
-        distance_sensor_count: int = 8,  # amount of distance sensord (equally distributed)
+        distance_sensor_count: int = 16,  # amount of distance sensord (equally distributed)
         radar_range: float = 1.0,  # [m]
         close_radar: float = 0.35,
-        max_sensor_dist: float = 1.25,  # [m]
+        max_sensor_dist: float = 2.5,  # [m]
         raycast_step_m: float = 0.05,  # [m]
         PPM: float = 200,  # pixels per meter
     ) -> None:
