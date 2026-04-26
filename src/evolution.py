@@ -630,7 +630,10 @@ def test_baseline() -> None:
 
     # Inicjalizacja mózgu i drona
     brain = HardcodedBrain()
-    drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+    drone = Drone(
+        (SCREEN_WIDTH // 2) / PPM,
+        (SCREEN_HEIGHT // 2) / PPM,
+    )
 
     target_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
     obstacles = []  # Pusty układ na start
@@ -670,7 +673,9 @@ def test_baseline() -> None:
         target_px = (mx, my)
         target_m = (mx / PPM, my / PPM)
 
-        # --- AI MYŚLI ---
+        # odświeżenie sensorów
+        _ = drone.get_sensor_data(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
+        # --- 'AI' MYŚLI ---
         output = brain.activate(drone, target_m)
 
         # Fizyka
@@ -696,7 +701,10 @@ def test_baseline() -> None:
             print(
                 f"BUM! Końcowy fitness przed zniszczeniem: {dummy_genome.fitness:.1f}"
             )
-            drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+            drone = Drone(
+                (SCREEN_WIDTH // 2) / PPM,
+                (SCREEN_HEIGHT // 2) / PPM,
+            )
             dummy_genome.fitness = FIT_START_CAPITAL
             stats.min_dist_m = math.hypot(
                 target_m[0] - drone._x, target_m[1] - drone._y

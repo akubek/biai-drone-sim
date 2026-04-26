@@ -53,7 +53,9 @@ class Drone:
             for i in range(self.distance_sensor_count)
         ]
 
-        self.last_sensor_data: list[float]
+        self.last_sensor_data: list[float] = [
+            max_sensor_dist for _ in range(self.distance_sensor_count)
+        ]
 
         # Moment bezwładności dla pręta: I = (1/12) * m * L^2
         # To fizycznie opisuje, jak trudno obrócić drona.
