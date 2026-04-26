@@ -24,7 +24,8 @@ class Drone:
         angular_drag: float = 0.05,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
         # sensor parameters
         distance_sensor_count: int = 8,  # amount of distance sensord (equally distributed)
-        radar_range: float = 0.75,  # [m]
+        radar_range: float = 1.0,  # [m]
+        close_radar: float = 0.35,
         max_sensor_dist: float = 1.25,  # [m]
         raycast_step_m: float = 0.05,  # [m]
         PPM: float = 200,  # pixels per meter
@@ -40,6 +41,7 @@ class Drone:
         self.angular_drag: float = angular_drag
 
         self.radar_range: float = radar_range
+        self.close_radar: float = close_radar
         self.max_sensor_dist: float = max_sensor_dist
         self.raycast_step_m: float = raycast_step_m
 
@@ -497,7 +499,8 @@ class Drone:
         norm_dist = dist_m / max_dist_m
 
         # radar
-        precision_radar = max(0.0, 1.0 - (dist_m / self.radar_range))
+        proximity_radar = max(0.0, 1.0 - (dist_m / self.radar_range))
+        proximity_radar2 = max(0.0, 1.0 - (dist_m / self.close_radar))
 
         # relative angle to target
         target_angle_rad = math.atan2(dy, dx)
@@ -517,7 +520,8 @@ class Drone:
             s_angle,
             c_angle,
             norm_dist,
-            precision_radar,
+            proximity_radar,
+            proximity_radar2,
             sin_targ,
             cos_targ,
             self.actual_l_thrust,

@@ -32,6 +32,18 @@ def parse_and_run() -> None:
         help="Wznów trening z checkpointu. Możesz podać nazwę pliku lub zostawić puste dla najnowszego.",
     )
 
+    parser.add_argument(
+        "--test-baseline",
+        action="store_true",
+        help="Wznów trening z checkpointu. Możesz podać nazwę pliku lub zostawić puste dla najnowszego.",
+    )
+
+    parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="Wznów trening z checkpointu. Możesz podać nazwę pliku lub zostawić puste dla najnowszego.",
+    )
+
     # Odczytujemy to, co użytkownik wpisał w terminalu
     args = parser.parse_args()
 
@@ -61,6 +73,10 @@ def parse_and_run() -> None:
             print("Wznawianie z najnowszego dostępnego checkpointu...")
 
         evolution.run_neat(config_path, checkpoint=checkpoint_file)
+    elif args.manual:
+        test_physics.test_manual_flight()
+    elif args.test_baseline:
+        evolution.test_baseline()
     else:
         print("TRYB TRENINGU: Rozpoczynanie ewolucji NEAT...")
         evolution.run_neat(config_path)

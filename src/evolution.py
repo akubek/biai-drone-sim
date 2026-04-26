@@ -8,8 +8,11 @@ from dataclasses import dataclass
 
 from pathlib import Path
 from typing import cast, Any
+
+from pygame.math import clamp
 from .drone import Drone
 from .constants import *
+from .hardcoded_brain import HardcodedBrain
 
 pygame.font.init()
 STAT_FONT = pygame.font.SysFont("arial", 50)
@@ -21,11 +24,11 @@ show_simulation = True
 class EvolutionStats:
     """Przechowuje stan i postępy drona dla algorytmu NEAT."""
 
-    initial_dist: float = 0.0
-    min_dist: float = 0.0
-    hover_frames: int = 0
-    idle_frames: int = 0
-    frames_without_progress: int = 0
+    initial_dist_m: float = 0.0
+    min_dist_m: float = 0.0
+    hover_time: float = 0.0
+    idle_time: float = 0.0
+    time_without_progress: float = 0.0
     has_touched_target: bool = False
     accumulated_rotation: float = 0.0
 
@@ -35,12 +38,15 @@ class EvolutionStats:
 # =====================================================================
 
 
+# DODAJEMY start_pos jako argument!
 def generate_obstacles(
-    target_pos: tuple[int, int], num_obstacles: int = 5
+    start_pos: tuple[int, int], target_pos: tuple[int, int], num_obstacles: int = 5
 ) -> list[pygame.Rect]:
     """Generuje losowe przeszkody, upewniając się, że nie blokują startu ani celu."""
     obstacles = []
-    start_rect = pygame.Rect(SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 - 50, 100, 100)
+
+    # POPRAWKA: Używamy przekazanego start_pos, a nie SCREEN_WIDTH // 2
+    start_rect = pygame.Rect(start_pos[0] - 50, start_pos[1] - 50, 100, 100)
     target_rect = pygame.Rect(target_pos[0] - 50, target_pos[1] - 50, 100, 100)
 
     for _ in range(num_obstacles):
@@ -54,6 +60,30 @@ def generate_obstacles(
             obstacles.append(new_rect)
 
     return obstacles
+
+
+def generate_start_and_target(
+    width: int, height: int, margin: int, min_dist: float
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """
+    Generuje losowy punkt startowy i docelowy gwarantując,
+    że są od siebie oddalone o co najmniej min_dist.
+    """
+    # 1. Losujemy start gdziekolwiek (z zachowaniem marginesu od ściany)
+    start_x = random.randint(margin, width - margin)
+    start_y = random.randint(margin, height - margin)
+    start_pos = (start_x, start_y)
+
+    # 2. Losujemy cel dopóki nie będzie wystarczająco daleko
+    while True:
+        target_x = random.randint(margin, width - margin)
+        target_y = random.randint(margin, height - margin)
+        target_pos = (target_x, target_y)
+
+        dist = math.hypot(target_x - start_x, target_y - start_y)
+
+        if dist >= min_dist:
+            return start_pos, target_pos
 
 
 def render_simulation(
@@ -72,7 +102,7 @@ def render_simulation(
         _ = pygame.draw.rect(screen, (255, 100, 100), obs, 2)
 
     # Rysowanie celu (Zakładamy, że TARGET_SIZE z constants.py jest w pikselach)
-    _ = pygame.draw.circle(screen, (0, 255, 0), target_pos_px, TARGET_SIZE, 2)
+    _ = pygame.draw.circle(screen, (0, 255, 0), target_pos_px, TARGET_SIZE_PX, 2)
     _ = pygame.draw.circle(screen, (0, 255, 0), target_pos_px, 3)
 
     # Przeliczamy pozycję celu na metry, by podać ją dronom
@@ -138,33 +168,36 @@ def calculate_difficulty(
     )
     dist_factor = dist_px / (SCREEN_WIDTH / 2)
 
-    return (1.5 if not visible else 1.0) * (1.0 + dist_factor)
+    return (
+        (1.5 if not visible else 1.0) * (1.0 + dist_factor) * (1 + len(obstacles) / 16)
+    )
 
 
 def _update_fitness(
     drone: Drone,
     stats: EvolutionStats,
     genome: Any,
-    target_pos_m: tuple[float, float],
+    target_m: tuple[float, float],
+    dist_m: float,
     difficulty_multiplier: float,
     current_time_sec: float,
+    dt: float,
     time_decay: float,
 ) -> None:
     """Oblicza nagrody i kary dla pojedynczej klatki (Fizyka SI)."""
 
-    t_peak = 2.0  # W której sekundzie nagroda jest największa (możesz przenieść do constants.py)
-
     # Zabezpieczenie na wypadek t_peak = 0
-    if t_peak > 0:
+    if SURVIVAL_TIME_PEAK > 0:
         # Wzór matematyczny z wykresu powyżej
-        time_multiplier = (current_time_sec / t_peak) * math.exp(
-            1.0 - (current_time_sec / t_peak)
+        time_multiplier = (current_time_sec / SURVIVAL_TIME_PEAK) * math.exp(
+            1.0 - (current_time_sec / SURVIVAL_TIME_PEAK)
         )
     else:
         time_multiplier = 0.0
 
-    survival_bonus = FIT_SURVIVAL_FRAME_REWARD * time_multiplier
-    genome.fitness += survival_bonus
+    if current_time_sec < SURVIVAL_TIME_PEAK + 1.0:
+        survival_bonus = FIT_SURVIVAL_FRAME_REWARD * time_multiplier
+        genome.fitness += survival_bonus * dt
 
     # 1. Nagroda za płynność (Smoothness)
     jitter = abs(drone.l_command - drone.prev_l_command) + abs(
@@ -176,34 +209,71 @@ def _update_fitness(
 
     genome.fitness -= jitter * FIT_JITTER_PENALTY
 
-    # 2. Dystans do celu (w metrach!)
-    dist_m: float = math.hypot(drone._x - target_pos_m[0], drone._y - target_pos_m[1])
-
     # 3. Stabilność przy celu
-    if dist_m < (TARGET_SIZE / PPM) * 2:
+    if dist_m < (TARGET_SIZE_PX / PPM) * 2:
         stability = max(0.0, 1.0 - abs(drone._angular_vel / 5.0))
-        genome.fitness += stability * FIT_STABILITY_MULT * difficulty_multiplier
+        genome.fitness += dt * stability * FIT_STABILITY_MULT * difficulty_multiplier
 
     # 4. Discovery Bonus
-    if not stats.has_touched_target and dist_m < (TARGET_SIZE / PPM):
+    if not stats.has_touched_target and dist_m < (TARGET_SIZE_PX / PPM):
         genome.fitness += FIT_DISCOVERY_BONUS * difficulty_multiplier * time_decay
         stats.has_touched_target = True
 
     # 5. Eksploracja i Stagnacja
-    if dist_m < stats.min_dist:
-        improvement = stats.min_dist - dist_m
-        if improvement > 0.0025:  # ok 0.5px
-            stats.frames_without_progress = 0
+    if dist_m < stats.min_dist_m:
+        improvement = stats.min_dist_m - dist_m
+        if improvement > FIT_STAGNATION_DISTANCE_LIMIT_M:
+            stats.time_without_progress = 0
             genome.fitness += (
-                improvement
-                * PPM
-                * FIT_EXPLORATION_MULT
-                * difficulty_multiplier
-                * time_decay
+                improvement * FIT_EXPLORATION_MULT * difficulty_multiplier * time_decay
             )
-        stats.min_dist = dist_m
+        stats.min_dist_m = dist_m
     else:
-        stats.frames_without_progress += 1
+        stats.time_without_progress += dt
+
+    speed = math.hypot(drone._vel_x, drone._vel_y)
+
+    # Próg lenistwa: np. 0.1 metra (zależy od Twoich jednostek prędkości,
+    # jeśli _vel_x to m/s, to 0.1 m/s to bardzo powolny dryf)
+    if speed < IDLE_MIN_SPEED:
+        stats.idle_time += dt
+    else:
+        stats.idle_time = 0
+
+    # Jeśli dron "wisi" bez sensu dłużej niż sekundę i NIE jest w celu:
+    if stats.idle_time > IDLE_LIMIT_SEC and dist_m > (TARGET_SIZE_PX / PPM):
+        # FIT_IDLE_PENALTY to np. 0.2 w constants.py
+        genome.fitness -= dt * FIT_IDLE_PENALTY / difficulty_multiplier
+
+    # --- NAGRODA ZA KIERUNKOWY WEKTOR PRĘDKOŚCI (VELOCITY ALIGNMENT) ---
+    dx = target_m[0] - drone._x
+    dy = target_m[1] - drone._y
+
+    if dist_m > 0:
+        # 1. Znormalizowany wektor kierunku do celu (wskazuje idealną drogę)
+        dir_x = dx / dist_m
+        dir_y = dy / dist_m
+
+        # 2. Prędkość drona w metrach na sekundę
+        vel_x_ms = (drone._vel_x * FPS) / PPM
+        vel_y_ms = (drone._vel_y * FPS) / PPM
+
+        # 3. Iloczyn skalarny: rzutowanie prędkości na idealny kierunek
+        # Zwraca wartość w m/s. Jeśli leci prosto w cel -> max, bokiem -> 0, w tył -> ujemne
+        velocity_towards_target = (vel_x_ms * dir_x) + (vel_y_ms * dir_y)
+
+        if velocity_towards_target > 0:
+            # Nagroda rośnie im szybciej i prościej leci
+            genome.fitness += (
+                velocity_towards_target
+                * dt
+                * FIT_DIR_VELOCITY_REWARD
+                * difficulty_multiplier
+            )
+        else:
+            # Kara za bezsensowny dryf w złą stronę (np. spadanie w dół gdy cel jest u góry)
+            # velocity_towards_target jest tu ujemne, więc DODAJEMY je do fitnessu (zmniejszając go)
+            genome.fitness += velocity_towards_target * dt * FIT_WRONG_DIR_PENALTY
 
     # --- DETEKCJA "BĄCZKÓW" (SPIN DETECTION) ---
     # Pobieramy zmianę kąta w tej klatce (angular_vel jest w stopniach/klatkę)
@@ -240,8 +310,8 @@ def eval_genomes(
     # 2. Definiujemy nasze 3 rundy (Test Suite)
     scenarios: list[tuple[str, int]] = [
         ("Runda 1: Otwarte Niebo", 0),
-        ("Runda 2: Standard", 5),
-        ("Runda 3: Tor Przeszkód", 10),
+        ("Runda 2: Standard", 2),
+        ("Runda 3: Tor Przeszkód", 5),
     ]
 
     for round_name, num_obs in scenarios:
@@ -255,10 +325,11 @@ def eval_genomes(
             random.randint(100, SCREEN_WIDTH - 100),
             random.randint(100, SCREEN_HEIGHT - 100),
         )
+        start_px, target_px = generate_start_and_target(
+            SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DISTANCE_PX
+        )
         target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
-        obstacles = generate_obstacles(target_px, num_obs)
-
-        start_px = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        obstacles = generate_obstacles(start_px, target_px, num_obs)
         diff_mult = calculate_difficulty(start_px, target_px, obstacles)
 
         for _, genome in genomes:
@@ -273,10 +344,10 @@ def eval_genomes(
             new_drone = Drone(drone_x, drone_y)
 
             # 3. Tworzenie statystyk ewolucyjnych dla tego konkretnego drona
-            # Obliczamy dystans początkowy
+            # Obliczamy dystans początkowy w metrach
             d_start = math.hypot(target_m[0] - drone_x, target_m[1] - drone_y)
 
-            new_stats = EvolutionStats(initial_dist=d_start, min_dist=d_start)
+            new_stats = EvolutionStats(initial_dist_m=d_start, min_dist_m=d_start)
 
             # 4. Dodawanie do list (kolejność musi być identyczna we wszystkich listach!)
             drones.append(new_drone)
@@ -313,48 +384,72 @@ def eval_genomes(
                 drone.set_engine_thrust(output[0], output[1])
                 drone.update(dt)
 
+                dist_m: float = math.hypot(
+                    drone._x - target_m[0], drone._y - target_m[1]
+                )
+
+                # zauwazamy ze dron od razu leci w zlym kierunku
+                if dist_m > stats.initial_dist_m + 2.0:
+                    genome_any.fitness *= 1 - FIT_ESCAPE_PENALTY_PERC
+                    to_remove.append(i)
+                    continue
+
                 # 3. Fitness
                 _ = _update_fitness(
                     drone,
                     stats,
                     ge[i],
                     target_m,
+                    dist_m,
                     diff_mult,
                     current_time_sec,
+                    dt,
                     time_decay,
-                )
-
-                dist_m: float = math.hypot(
-                    drone._x - target_m[0], drone._y - target_m[1]
                 )
 
                 # 4. Kolizje i Stagnacja (Warunki usunięcia)
                 if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
-                    genome_any.fitness *= FIT_CRASH_MULT
-                    genome_any.fitness -= FIT_CRASH_BASE_PENALTY * max(
-                        0.1, dist_m / stats.initial_dist
+                    dist_coeff = max(0.5, min(1.0, dist_m / stats.initial_dist_m))
+
+                    crash_speed = math.hypot(drone._vel_x, drone._vel_y)
+
+                    kamikaze_mult = max(1.0, crash_speed / SAFE_CRASH_SPEED_M_S)
+
+                    actual_penalty_perc = min(
+                        0.95, FIT_CRASH_PENALTY_PERC * dist_coeff * kamikaze_mult
                     )
+                    # if closer to target (dist_coeff lower) apply less penalty min, half (for now)
+                    genome_any.fitness *= 1 - actual_penalty_perc
+                    # less penalty if it crashed closer to the point
+                    genome_any.fitness -= FIT_CRASH_BASE_PENALTY * dist_coeff
+
+                    if crash_speed > SAFE_CRASH_SPEED_M_S:
+                        genome_any.fitness -= FIT_KAMIKAZE_PENALTY * (
+                            crash_speed - SAFE_CRASH_SPEED_M_S
+                        )
+
                     to_remove.append(i)
                     continue
 
-                if dist_m < (TARGET_SIZE / PPM):
-                    stats.hover_frames += 1
+                if dist_m < (TARGET_SIZE_PX / PPM):
+                    stats.hover_time += dt
                     genome_any.fitness += (
-                        FIT_HOVER_REWARD
+                        dt
+                        * FIT_HOVER_REWARD
                         * diff_mult
                         * time_decay
-                        * (1 + stats.hover_frames * 0.1)
+                        * (1 + stats.hover_time * 0.1)
                     )
-                    if stats.hover_frames >= FPS * HOVER_REQUIRED_SEC:
+                    if stats.hover_time >= HOVER_REQUIRED_SEC:
                         genome_any.fitness += (
                             FIT_HOVER_SUCCESS_BONUS * diff_mult * time_decay
                         )
                         genome_any.fitness += (max_frames - frames) * 2
                         to_remove.append(i)
                 else:
-                    stats.hover_frames = 0
-                    if stats.frames_without_progress > FPS * STAGNATION_LIMIT_SEC:
-                        genome_any.fitness *= FIT_STAGNATION_MULT
+                    stats.hover_time = 0
+                    if stats.time_without_progress > STAGNATION_LIMIT_SEC:
+                        genome_any.fitness *= 1 - FIT_STAGNATION_PENALTY_PERC
                         to_remove.append(i)
 
             # Usuwanie dronów
@@ -371,8 +466,8 @@ def eval_genomes(
             stats = stats_list[i]
             dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
             genome_any = cast(Any, ge[i])
-            if dist_m > stats.initial_dist:
-                genome_any.fitness *= FIT_ESCAPE_PENALTY_MULT
+            if dist_m > stats.initial_dist_m:
+                genome_any.fitness *= 1 - FIT_ESCAPE_PENALTY_PERC
             else:
                 genome_any.fitness *= FIT_SURVIVAL_BONUS_MULT
 
@@ -487,11 +582,14 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
     clock = pygame.time.Clock()
 
     net = neat.nn.FeedForwardNetwork.create(winner_genome, config)
-    drone = Drone(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+    drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
 
     # NOWOŚĆ: Generujemy startowe przeszkody, żeby dron miał co omijać!
     target_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
-    obstacles = generate_obstacles(target_pos, num_obstacles=8)
+    drone_pos_px: tuple[int, int] = cast(
+        tuple[int, int], (drone._x * PPM, drone._y * PPM)
+    )
+    obstacles = generate_obstacles(drone_pos_px, target_pos, num_obstacles=2)
 
     run = True
     while run:
@@ -500,7 +598,12 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
                 run = False
             # Opcjonalnie: Prawy przycisk myszy odświeża układ przeszkód
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                obstacles = generate_obstacles(target_pos, num_obstacles=8)
+                drone_pos_px: tuple[int, int] = cast(
+                    tuple[int, int], (drone._x * PPM, drone._y * PPM)
+                )
+                obstacles = generate_obstacles(
+                    drone_pos_px, target_pos, num_obstacles=2
+                )
 
         mx, my = pygame.mouse.get_pos()
         target_px = (mx, my)
@@ -510,9 +613,104 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
         inputs = drone.get_inputs(target_m, SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
         output = net.activate(inputs)
         drone.set_engine_thrust(output[0], output[1])
-        drone.update()
+        drone.update(1.0 / FPS)
 
         render_simulation(screen, [drone], target_px, obstacles, PPM)
+        clock.tick(FPS)
+
+    pygame.quit()
+
+
+def test_baseline() -> None:
+    """Odpala drona sterowanego ręcznym algorytmem, by zbadać działanie fitnessu."""
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    pygame.display.set_caption("BIAI Drone Sim - HARDCODED BASELINE")
+    clock = pygame.time.Clock()
+
+    # Inicjalizacja mózgu i drona
+    brain = HardcodedBrain()
+    drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+
+    target_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
+    obstacles = []  # Pusty układ na start
+
+    # Startowe metryki do fitnessu
+    d_start = math.hypot(target_pos[0] / PPM - drone._x, target_pos[1] / PPM - drone._y)
+    stats = EvolutionStats(initial_dist_m=d_start, min_dist_m=d_start)
+
+    # Atrapa genomu (klasa, do której będziemy zapisywać zmienną .fitness)
+    class DummyGenome:
+        fitness = FIT_START_CAPITAL
+
+    dummy_genome = DummyGenome()
+
+    frames = 0
+    run = True
+
+    while run:
+        dt = 1.0 / FPS
+        frames += 1
+        current_time_sec = frames / FPS
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+            # Prawy przycisk myszy losuje przeszkody, żebyś mógł sprawdzić jak w nie uderza
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                drone_pos_px: tuple[int, int] = cast(
+                    tuple[int, int], (drone._x * PPM, drone._y * PPM)
+                )
+                obstacles = generate_obstacles(
+                    drone_pos_px, target_pos, num_obstacles=4
+                )
+
+        # Cel podąża za kursorem
+        mx, my = pygame.mouse.get_pos()
+        target_px = (mx, my)
+        target_m = (mx / PPM, my / PPM)
+
+        # --- AI MYŚLI ---
+        output = brain.activate(drone, target_m)
+
+        # Fizyka
+        drone.set_engine_thrust(output[0], output[1])
+        drone.update(dt)
+
+        # Obliczamy fitness co klatkę!
+        dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
+        _update_fitness(
+            drone=drone,
+            stats=stats,
+            genome=dummy_genome,
+            dist_m=dist_m,
+            target_m=target_m,
+            difficulty_multiplier=1.0,
+            current_time_sec=current_time_sec,
+            dt=dt,
+            time_decay=1.0,
+        )
+
+        # Jeśli dron się rozbił, resetujemy go (żebyś nie musiał restartować programu)
+        if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
+            print(
+                f"BUM! Końcowy fitness przed zniszczeniem: {dummy_genome.fitness:.1f}"
+            )
+            drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+            dummy_genome.fitness = FIT_START_CAPITAL
+            stats.min_dist_m = math.hypot(
+                target_m[0] - drone._x, target_m[1] - drone._y
+            )
+            frames = 0  # Reset czasu
+
+        render_simulation(screen, [drone], target_px, obstacles, PPM)
+
+        # Wypisywanie wyniku co 10 sekund (co 60 klatek)
+        if (frames / 10) % FPS == 0:
+            print(
+                f"T: {current_time_sec:.1f}s | Fitness: {dummy_genome.fitness:.1f} | Dystans: {dist_m:.2f}m"
+            )
+
         clock.tick(FPS)
 
     pygame.quit()
