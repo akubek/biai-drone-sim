@@ -4,8 +4,10 @@ import math
 import sys
 import random
 import pickle
+from dataclasses import dataclass
 
 from pathlib import Path
+from typing import cast, Any
 from .drone import Drone
 from .constants import *
 
@@ -13,11 +15,20 @@ pygame.font.init()
 STAT_FONT = pygame.font.SysFont("arial", 50)
 
 show_simulation = True
-EVOLUTION_CYCLES = 250
-SIMULATION_TIME = 10
-TARGET_SIZE = 50
-BASE_CRASH_PENALTY = 20.0
-stagnation_limit = FPS * 2.5
+
+
+@dataclass
+class EvolutionStats:
+    """Przechowuje stan i postępy drona dla algorytmu NEAT."""
+
+    initial_dist: float = 0.0
+    min_dist: float = 0.0
+    hover_frames: int = 0
+    idle_frames: int = 0
+    frames_without_progress: int = 0
+    has_touched_target: bool = False
+    accumulated_rotation: float = 0.0
+
 
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I GRAFIKA)
@@ -45,71 +56,68 @@ def generate_obstacles(
     return obstacles
 
 
-def check_collisions(
-    drone: Drone, obstacles: list[pygame.Rect], drone_radius: int = 20
-) -> tuple[bool, bool]:
-    """Sprawdza kolizje drona ze ścianami i przeszkodami."""
-    hit_wall = (
-        drone.x - drone_radius < 0
-        or drone.x + drone_radius > SCREEN_WIDTH
-        or drone.y - drone_radius < 0
-        or drone.y + drone_radius > SCREEN_HEIGHT
-    )
-    drone_rect = pygame.Rect(
-        drone.x - drone_radius,
-        drone.y - drone_radius,
-        drone_radius * 2,
-        drone_radius * 2,
-    )
-    hit_obstacle = any(obs.colliderect(drone_rect) for obs in obstacles)
-
-    return hit_wall, hit_obstacle
-
-
 def render_simulation(
     screen: pygame.Surface,
-    drones: list[Drone],
-    target_pos: tuple[int, int],
+    drones: list[Drone],  # Lista obiektów klasy Drone (z fizyką SI)
+    target_pos_px: tuple[int, int],
     obstacles: list[pygame.Rect],
+    PPM: float,  # Nowy argument: Skala
 ) -> None:
     """Rysuje całą klatkę symulacji."""
-    screen.fill((20, 25, 30))
+    _ = screen.fill((20, 25, 30))
 
     # Rysowanie przeszkód
     for obs in obstacles:
-        pygame.draw.rect(screen, (150, 50, 50), obs)
-        pygame.draw.rect(screen, (255, 100, 100), obs, 2)
+        _ = pygame.draw.rect(screen, (150, 50, 50), obs)
+        _ = pygame.draw.rect(screen, (255, 100, 100), obs, 2)
 
-    # Rysowanie celu
-    pygame.draw.circle(screen, (0, 255, 0), target_pos, TARGET_SIZE, 2)
-    pygame.draw.circle(screen, (0, 255, 0), target_pos, 3)
+    # Rysowanie celu (Zakładamy, że TARGET_SIZE z constants.py jest w pikselach)
+    _ = pygame.draw.circle(screen, (0, 255, 0), target_pos_px, TARGET_SIZE, 2)
+    _ = pygame.draw.circle(screen, (0, 255, 0), target_pos_px, 3)
+
+    # Przeliczamy pozycję celu na metry, by podać ją dronom
+    target_pos_m = (target_pos_px[0] / PPM, target_pos_px[1] / PPM)
 
     # Rysowanie dronów
-    for drone in drones:
+    for i, drone in enumerate(drones):
+        # Flaga: Rysuj zaawansowane zmysły tylko dla pierwszego (lub jedynego) drona
+        is_champion = i == 0
+
         drone.draw(
-            screen,
-            target_pos,
-            getattr(drone, "l_thrust", 0.5),
-            getattr(drone, "r_thrust", 0.5),
+            screen=screen,
+            target_pos_m=target_pos_m,
+            PPM=PPM,
+            show_radar=is_champion,  # Radar tylko dla lidera
+            show_sensors=is_champion,  # Sensory tylko dla lidera
+            show_thrust=True,  # Płomienie silników dla wszystkich!
+            show_hitbox=False,
         )
-    pygame.display.flip()
+
+    _ = pygame.display.flip()
 
 
 def remove_drone(
     index: int,
     drones: list[Drone],
+    stats: list[EvolutionStats],
     nets: list[neat.nn.FeedForwardNetwork],
     ge: list[neat.DefaultGenome],
 ) -> None:
-    drones.pop(index)
-    nets.pop(index)
-    ge.pop(index)
+    # remove from simulation
+    _ = drones.pop(index)
+    _ = stats.pop(index)
+    _ = nets.pop(index)
+    _ = ge.pop(index)
 
 
 # =====================================================================
 # GŁÓWNA LOGIKA EWOLUCJI
 # =====================================================================
-def is_target_visible(start_pos, target_pos, obstacles):
+def is_target_visible(
+    start_pos: tuple[int, int],
+    target_pos: tuple[float, float],
+    obstacles: list[pygame.Rect],
+) -> bool:
     """Sprawdza, czy linia między startem a celem jest przecięta przez przeszkodę."""
     line = (start_pos, target_pos)
     for obs in obstacles:
@@ -118,203 +126,267 @@ def is_target_visible(start_pos, target_pos, obstacles):
     return True
 
 
-def eval_genomes(genomes, config) -> None:
+def calculate_difficulty(
+    start_pos_px: tuple[int, int],
+    target_pos_px: tuple[float, float],
+    obstacles: list[pygame.Rect],
+) -> float:
+    """Oblicza mnożnik trudności na podstawie widoczności i dystansu."""
+    visible: bool = is_target_visible(start_pos_px, target_pos_px, obstacles)
+    dist_px = math.hypot(
+        target_pos_px[0] - start_pos_px[0], target_pos_px[1] - start_pos_px[1]
+    )
+    dist_factor = dist_px / (SCREEN_WIDTH / 2)
+
+    return (1.5 if not visible else 1.0) * (1.0 + dist_factor)
+
+
+def _update_fitness(
+    drone: Drone,
+    stats: EvolutionStats,
+    genome: Any,
+    target_pos_m: tuple[float, float],
+    difficulty_multiplier: float,
+    current_time_sec: float,
+    time_decay: float,
+) -> None:
+    """Oblicza nagrody i kary dla pojedynczej klatki (Fizyka SI)."""
+
+    t_peak = 2.0  # W której sekundzie nagroda jest największa (możesz przenieść do constants.py)
+
+    # Zabezpieczenie na wypadek t_peak = 0
+    if t_peak > 0:
+        # Wzór matematyczny z wykresu powyżej
+        time_multiplier = (current_time_sec / t_peak) * math.exp(
+            1.0 - (current_time_sec / t_peak)
+        )
+    else:
+        time_multiplier = 0.0
+
+    survival_bonus = FIT_SURVIVAL_FRAME_REWARD * time_multiplier
+    genome.fitness += survival_bonus
+
+    # 1. Nagroda za płynność (Smoothness)
+    jitter = abs(drone.l_command - drone.prev_l_command) + abs(
+        drone.r_command - drone.prev_r_command
+    )
+
+    # smoothness = max(0.0, 1.0 - jitter)
+    # genome.fitness += smoothness * FIT_SMOOTHNESS_MULT * difficulty_multiplier
+
+    genome.fitness -= jitter * FIT_JITTER_PENALTY
+
+    # 2. Dystans do celu (w metrach!)
+    dist_m: float = math.hypot(drone._x - target_pos_m[0], drone._y - target_pos_m[1])
+
+    # 3. Stabilność przy celu
+    if dist_m < (TARGET_SIZE / PPM) * 2:
+        stability = max(0.0, 1.0 - abs(drone._angular_vel / 5.0))
+        genome.fitness += stability * FIT_STABILITY_MULT * difficulty_multiplier
+
+    # 4. Discovery Bonus
+    if not stats.has_touched_target and dist_m < (TARGET_SIZE / PPM):
+        genome.fitness += FIT_DISCOVERY_BONUS * difficulty_multiplier * time_decay
+        stats.has_touched_target = True
+
+    # 5. Eksploracja i Stagnacja
+    if dist_m < stats.min_dist:
+        improvement = stats.min_dist - dist_m
+        if improvement > 0.0025:  # ok 0.5px
+            stats.frames_without_progress = 0
+            genome.fitness += (
+                improvement
+                * PPM
+                * FIT_EXPLORATION_MULT
+                * difficulty_multiplier
+                * time_decay
+            )
+        stats.min_dist = dist_m
+    else:
+        stats.frames_without_progress += 1
+
+    # --- DETEKCJA "BĄCZKÓW" (SPIN DETECTION) ---
+    # Pobieramy zmianę kąta w tej klatce (angular_vel jest w stopniach/klatkę)
+    current_spin = drone._angular_vel
+
+    # Sprawdzamy, czy dron zmienił kierunek obrotu (iloczyn ujemny oznacza różne znaki)
+    if current_spin * stats.accumulated_rotation < 0:
+        # Jeśli zaczął kręcić się w drugą stronę - resetujemy licznik "ciągłego spinu"
+        stats.accumulated_rotation = 0.0
+
+    # Dodajemy obecny obrót do puli
+    stats.accumulated_rotation += current_spin
+
+    # Jeśli przekroczył limit (np. 720 stopni w lewo lub w prawo)
+    spin_threshold_deg = MAX_ALLOWED_SPINS * 360.0
+    if abs(stats.accumulated_rotation) > spin_threshold_deg:
+        # Ostra kara co klatkę, dopóki się kręci
+        # To sprawi, że fitness drona błyskawicznie spadnie
+        genome.fitness -= FIT_SPIN_PENALTY  # Zabieramy 5% punktów w każdej klatce spinu
+
+
+def eval_genomes(
+    genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config
+) -> None:
     global show_simulation
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
 
-    nets, drones, ge = [], [], []
-
-    # 1. Środowisko
-    target_pos = (
-        random.randint(100, SCREEN_WIDTH - 100),
-        random.randint(100, SCREEN_HEIGHT - 100),
-    )
-    obstacles = generate_obstacles(target_pos)
-
-    # --- OBLICZANIE TRUDNOŚCI GENERACJI ---
-    start_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-    visible = is_target_visible(start_pos, target_pos, obstacles)
-
-    # Dystans startowy (im dalej, tym trudniej)
-    dist_start = math.hypot(target_pos[0] - start_pos[0], target_pos[1] - start_pos[1])
-    dist_factor = dist_start / (SCREEN_WIDTH / 2)  # Normalizacja względem połowy ekranu
-
-    # Finalny mnożnik: bonus za brak widoczności (1.5x) i za dystans
-    difficulty_multiplier = (1.5 if not visible else 1.0) * (1.0 + dist_factor)
-
-    # 2. Populacja
     for genome_id, genome in genomes:
-        genome.fitness = 100.0  # STARTOWY KAPITAŁ
-        nets.append(neat.nn.FeedForwardNetwork.create(genome, config))
+        cast(
+            Any, genome
+        ).fitness = FIT_START_CAPITAL  # lub np. 0.0, jeśli użyjesz akumulacji
 
-        new_drone = Drone(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-        new_drone.hover_frames = 0
-        new_drone.idle_frames = 0
-        new_drone.initial_dist = dist_start
-        new_drone.min_dist = new_drone.initial_dist
-        new_drone.has_touched_target = False  # Flaga dla bonusu
+    # 2. Definiujemy nasze 3 rundy (Test Suite)
+    scenarios: list[tuple[str, int]] = [
+        ("Runda 1: Otwarte Niebo", 0),
+        ("Runda 2: Standard", 5),
+        ("Runda 3: Tor Przeszkód", 10),
+    ]
 
-        drones.append(new_drone)
-        ge.append(genome)
+    for round_name, num_obs in scenarios:
+        saved_fitness = {genome_id: cast(Any, g).fitness for genome_id, g in genomes}
+        nets: list[neat.nn.FeedForwardNetwork] = []
+        ge: list[neat.DefaultGenome] = []
+        drones: list[Drone] = []
+        stats_list: list[EvolutionStats] = []
+        # Setup środowiska
+        target_px = (
+            random.randint(100, SCREEN_WIDTH - 100),
+            random.randint(100, SCREEN_HEIGHT - 100),
+        )
+        target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
+        obstacles = generate_obstacles(target_px, num_obs)
 
-    run = True
-    frames = 0
-    max_frames = FPS * SIMULATION_TIME
+        start_px = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        diff_mult = calculate_difficulty(start_px, target_px, obstacles)
 
-    # 3. Pętla Życia
-    while run and len(drones) > 0:
-        frames += 1
-        if frames > max_frames:
-            break
+        for _, genome in genomes:
+            # 1. NEAT Setup
+            genome_any = cast(Any, genome)
+            genome_any.fitness = FIT_START_CAPITAL
+            nets.append(neat.nn.FeedForwardNetwork.create(genome, config))
 
-        if show_simulation or frames % 10 == 0:
+            # 2. Tworzenie fizycznego drona (w metrach)
+            drone_x = start_px[0] / PPM
+            drone_y = start_px[1] / PPM
+            new_drone = Drone(drone_x, drone_y)
+
+            # 3. Tworzenie statystyk ewolucyjnych dla tego konkretnego drona
+            # Obliczamy dystans początkowy
+            d_start = math.hypot(target_m[0] - drone_x, target_m[1] - drone_y)
+
+            new_stats = EvolutionStats(initial_dist=d_start, min_dist=d_start)
+
+            # 4. Dodawanie do list (kolejność musi być identyczna we wszystkich listach!)
+            drones.append(new_drone)
+            stats_list.append(new_stats)
+            ge.append(genome)
+
+        frames = 0
+        max_frames = FPS * SIMULATION_TIME
+        dt = 1.0 / FPS
+
+        while frames < max_frames and drones:
+            frames += 1
+            current_time_sec = frames / FPS
+            time_decay = 1.0 - (0.8 * (frames / max_frames))
+
+            # Event handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
                     sys.exit()
-                elif event.type == pygame.KEYDOWN and event.key == pygame.K_h:
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_h:
                     show_simulation = not show_simulation
 
-        drones_to_remove = []
+            to_remove = []
+            for i, drone in enumerate(drones):
+                stats = stats_list[i]
+                genome_any = cast(Any, ge[i])
+                # 1. AI Decision
+                inputs = drone.get_inputs(
+                    target_m, SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM
+                )
+                output = nets[i].activate(inputs)
 
-        for i, drone in enumerate(drones):
-            inputs = drone.get_inputs(
-                target_pos[0], target_pos[1], SCREEN_WIDTH, SCREEN_HEIGHT, obstacles
-            )
-            output = nets[i].activate(inputs)
+                # 2. Fizyka
+                drone.set_engine_thrust(output[0], output[1])
+                drone.update(dt)
 
-            drone.l_thrust, drone.r_thrust = output[0], output[1]
-            drone.apply_thrust(drone.l_thrust, drone.r_thrust)
-            drone.update()
+                # 3. Fitness
+                _ = _update_fitness(
+                    drone,
+                    stats,
+                    ge[i],
+                    target_m,
+                    diff_mult,
+                    current_time_sec,
+                    time_decay,
+                )
 
-            # ==========================================
-            # SMOOTHNESS BONUS (Premia za płynność)
-            # ==========================================
-            # Liczymy o ile zmieniła się moc silników od ostatniej klatki
-            delta_l = abs(drone.l_thrust - drone.prev_l_thrust)
-            delta_r = abs(drone.r_thrust - drone.prev_r_thrust)
+                dist_m: float = math.hypot(
+                    drone._x - target_m[0], drone._y - target_m[1]
+                )
 
-            # Sumaryczna "szorstkość" (jitter). Max to 2.0 (jeśli oba skoczyły z 0 na 1)
-            jitter = delta_l + delta_r
-
-            # Zamieniamy to na bonus (płynność).
-            # 1.0 oznacza idealnie stały ciąg, 0.0 oznacza maksymalne szarpanie.
-            smoothness = max(0.0, 1.0 - jitter)
-
-            # Dodajemy mały, stały bonus za każdą klatkę płynnego lotu.
-            # To sprawi, że drony "drgające" będą miały wyraźnie mniej punktów
-            # od tych "płynnych" przy tym samym dystansie do celu.
-            ge[i].fitness += smoothness * 0.5 * difficulty_multiplier
-
-            dist = math.hypot(drone.x - target_pos[0], drone.y - target_pos[1])
-            time_progress = frames / max_frames
-            time_decay = 1.0 - (0.8 * time_progress)
-
-            # Jeśli dron jest w miarę blisko celu, nagradzaj brak niepotrzebnych obrotów
-            if dist < TARGET_SIZE * 2:
-                # angular_vel to zmiana kąta w czasie.
-                # Chcemy, żeby była bliska 0 przy precyzyjnym manewrowaniu.
-                stability_bonus = max(0.0, 1.0 - abs(drone.angular_vel / 5.0))
-                ge[i].fitness += stability_bonus * 0.2 * difficulty_multiplier
-
-            # --- NAGRODA: Discovery Bonus (Tylko raz!) ---
-            if not drone.has_touched_target and dist < TARGET_SIZE:
-                # Duży bonus za samo dotarcie, skalowany trudnością
-                ge[i].fitness += 500.0 * difficulty_multiplier * time_decay
-                drone.has_touched_target = True
-
-            # --- FITNESS: Lenistwo ---
-            speed = math.hypot(drone.vel_x, drone.vel_y)
-            if speed < 2:
-                drone.idle_frames += 1
-            else:
-                drone.idle_frames = 0
-
-            if dist > TARGET_SIZE and drone.idle_frames > 60:
-                ge[i].fitness -= 0.2  # Stała mała kara
-
-            # --- FITNESS: Eksploracja (Zależna od trudności) ---
-            if dist < drone.min_dist:
-                # Im trudniejsza generacja, tym więcej wart każdy piksel zbliżenia
-                improvement = drone.min_dist - dist
-                if improvement > 0.5:
-                    drone.frames_without_progress = 0  # Reset licznika
-                    ge[i].fitness += (
-                        improvement * 0.5 * difficulty_multiplier * time_decay
+                # 4. Kolizje i Stagnacja (Warunki usunięcia)
+                if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
+                    genome_any.fitness *= FIT_CRASH_MULT
+                    genome_any.fitness -= FIT_CRASH_BASE_PENALTY * max(
+                        0.1, dist_m / stats.initial_dist
                     )
-                drone.min_dist = dist
-            else:
-                drone.frames_without_progress += 1
+                    to_remove.append(i)
+                    continue
 
-            # --- FITNESS: Kolizje (Proporcjonalne) ---
-            hit_wall, hit_obstacle = check_collisions(drone, obstacles)
-
-            if hit_wall or hit_obstacle:
-                # Zamiast odejmowania stałej, zabieramy % kapitału i mały bonus kary
-                # Dron który nic nie zrobił, spadnie do 10-20 pkt.
-                ge[i].fitness *= 0.5  # Tracisz połowę za zniszczenie sprzętu
-
-                dist_ratio = max(0.1, min(dist / drone.initial_dist, 1.0))
-                ge[i].fitness -= 20.0 * dist_ratio  # Dodatkowa kara zależna od dystansu
-
-                drones_to_remove.append(i)
-
-            else:
-                # --- FITNESS: Cel (Hover) ---
-                if dist < TARGET_SIZE:
-                    drone.hover_frames += 1
-                    # Nagroda za każdą klatkę w kółku, skalowana trudnością
-                    hover_reward = (
-                        3.0
-                        * difficulty_multiplier
+                if dist_m < (TARGET_SIZE / PPM):
+                    stats.hover_frames += 1
+                    genome_any.fitness += (
+                        FIT_HOVER_REWARD
+                        * diff_mult
                         * time_decay
-                        * (1 + drone.hover_frames * 0.1)
+                        * (1 + stats.hover_frames * 0.1)
                     )
-                    ge[i].fitness += hover_reward
-
-                    if drone.hover_frames >= FPS * 1:
-                        # Bonus za stabilność
-                        ge[i].fitness += 2000 * difficulty_multiplier * time_decay
-                        ge[i].fitness += (max_frames - frames) * 2
-                        drones_to_remove.append(i)
+                    if stats.hover_frames >= FPS * HOVER_REQUIRED_SEC:
+                        genome_any.fitness += (
+                            FIT_HOVER_SUCCESS_BONUS * diff_mult * time_decay
+                        )
+                        genome_any.fitness += (max_frames - frames) * 2
+                        to_remove.append(i)
                 else:
-                    if drone.frames_without_progress > stagnation_limit:
-                        ge[i].fitness *= 0.9
-                        drones_to_remove.append(i)
-                        continue  # Przejdź do następnego drona
-                    drone.hover_frames = 0
+                    stats.hover_frames = 0
+                    if stats.frames_without_progress > FPS * STAGNATION_LIMIT_SEC:
+                        genome_any.fitness *= FIT_STAGNATION_MULT
+                        to_remove.append(i)
 
-                if (
-                    ge[i].fitness < 10.0
-                ):  # Jeśli roztrwonił prawie cały startowy kapitał
-                    drones_to_remove.append(i)
+            # Usuwanie dronów
+            for index in reversed(to_remove):
+                remove_drone(index, drones, stats_list, nets, ge)
 
-        for i in reversed(drones_to_remove):
-            remove_drone(i, drones, nets, ge)
+            # Render
+            if show_simulation:
+                render_simulation(screen, drones, target_px, obstacles, PPM)
+                clock.tick(FPS)
 
-        if show_simulation:
-            render_simulation(screen, drones, target_pos, obstacles)
-            clock.tick(FPS)
-        else:
-            screen.fill((20, 25, 30))
-            hidden_txt = STAT_FONT.render("SIMULATION HIDDEN", True, (255, 255, 255))
-            text_rect = hidden_txt.get_rect(
-                center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
-            )
-            screen.blit(hidden_txt, text_rect)
+        # Ocena końcowa dla ocalałych w rundzie
+        for i, drone in enumerate(drones):
+            stats = stats_list[i]
+            dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
+            genome_any = cast(Any, ge[i])
+            if dist_m > stats.initial_dist:
+                genome_any.fitness *= FIT_ESCAPE_PENALTY_MULT
+            else:
+                genome_any.fitness *= FIT_SURVIVAL_BONUS_MULT
 
-            pygame.display.flip()
+        # Koniec rundy! Dodajemy wynik z tej rundy do tego, co zapisaliśmy wcześniej
+        for genome_id, genome in genomes:
+            genome_any = cast(Any, genome)
+            round_score = genome_any.fitness
+            # Łączymy "bank" z poprzednich rund z tym, co ugrał w tej
+            genome_any.fitness = saved_fitness[genome_id] + round_score
 
-    # --- OCENA KOŃCOWA ---
-    for i, drone in enumerate(drones):
-        # Drony, które przeżyły, ale nie dotarły
-        dist = math.hypot(drone.x - target_pos[0], drone.y - target_pos[1])
-        if dist > drone.initial_dist:
-            ge[i].fitness *= 0.8  # Kara 20% za ucieczkę
-        else:
-            # Mały bonus za bycie bliżej niż na starcie
-            ge[i].fitness *= 1.2
+    # po wszystkich rundach całkowity fitness
+    num_rounds = len(scenarios)
+    for genome_id, genome in genomes:
+        cast(Any, genome).fitness /= num_rounds
 
 
 # =====================================================================
@@ -430,20 +502,17 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
                 obstacles = generate_obstacles(target_pos, num_obstacles=8)
 
-        mouse_x, mouse_y = pygame.mouse.get_pos()
-        target_pos = (mouse_x, mouse_y)
+        mx, my = pygame.mouse.get_pos()
+        target_px = (mx, my)
+        target_m = (mx / PPM, my / PPM)  # Konwersja na metry dla AI
 
         # Używamy tej samej fizyki i renderowania co w treningu!
-        inputs = drone.get_inputs(
-            target_pos[0], target_pos[1], SCREEN_WIDTH, SCREEN_HEIGHT, obstacles
-        )
+        inputs = drone.get_inputs(target_m, SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
         output = net.activate(inputs)
-        drone.l_thrust = output[0]  # (output[0] + 1.0) / 2.0
-        drone.r_thrust = output[1]  # (output[1] + 1.0) / 2.0
-        drone.apply_thrust(drone.l_thrust, drone.r_thrust)
+        drone.set_engine_thrust(output[0], output[1])
         drone.update()
 
-        render_simulation(screen, [drone], target_pos, obstacles)
+        render_simulation(screen, [drone], target_px, obstacles, PPM)
         clock.tick(FPS)
 
     pygame.quit()

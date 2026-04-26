@@ -3,9 +3,10 @@ import argparse
 import sys
 
 from src import evolution
+from src import test_physics
 
 
-def main() -> None:
+def parse_and_run() -> None:
     parser = argparse.ArgumentParser(description="BIAI Drone Sim - Ewolucja NEAT")
 
     # Dodajemy flagę --replay-best (jeśli podana, wartość to True, domyślnie False)
@@ -63,6 +64,12 @@ def main() -> None:
     else:
         print("TRYB TRENINGU: Rozpoczynanie ewolucji NEAT...")
         evolution.run_neat(config_path)
+
+
+def main() -> None:
+    parse_and_run()
+    # test_physics.test_manual_flight()
+    return
 
 
 if __name__ == "__main__":
