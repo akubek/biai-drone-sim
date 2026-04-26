@@ -18,6 +18,7 @@ pygame.font.init()
 STAT_FONT = pygame.font.SysFont("arial", 50)
 
 show_simulation = True
+generation_count = 0
 
 
 @dataclass
@@ -299,8 +300,12 @@ def eval_genomes(
     genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config
 ) -> None:
     global show_simulation
+    global generation_count
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
+
+    max_help_gens = 50
+    help_weight = max(0, 1.0 - (generation_count / max_help_gens))
 
     for genome_id, genome in genomes:
         cast(
@@ -320,6 +325,8 @@ def eval_genomes(
         ge: list[neat.DefaultGenome] = []
         drones: list[Drone] = []
         stats_list: list[EvolutionStats] = []
+
+        expert = HardcodedBrain()  # 'expert' drone that already knows how to fly
         # Setup środowiska
         target_px = (
             random.randint(100, SCREEN_WIDTH - 100),
@@ -378,10 +385,19 @@ def eval_genomes(
                 inputs = drone.get_inputs(
                     target_m, SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM
                 )
-                output = nets[i].activate(inputs)
+                ai_output = nets[i].activate(inputs)
+
+                # reward for similar behaviour to expert at beginning
+                if help_weight > 0:
+                    expert_output = expert.activate(drone, target_m)
+                    error = abs(ai_output[0] - expert_output[0]) + abs(
+                        ai_output[1] - expert_output[1]
+                    )
+                    imitation_reward = max(0, (2.0 - error) * 0.025) * help_weight
+                    genome_any.fitness += imitation_reward
 
                 # 2. Fizyka
-                drone.set_engine_thrust(output[0], output[1])
+                drone.set_engine_thrust(ai_output[0], ai_output[1])
                 drone.update(dt)
 
                 dist_m: float = math.hypot(
@@ -482,6 +498,7 @@ def eval_genomes(
     num_rounds = len(scenarios)
     for genome_id, genome in genomes:
         cast(Any, genome).fitness /= num_rounds
+    generation_count += 1
 
 
 # =====================================================================
@@ -621,104 +638,128 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
     pygame.quit()
 
 
+def reset_test_drone(target_m: tuple[float, float]):
+    """Pomocnicza funkcja do tworzenia świeżych obiektów po resecie."""
+    new_drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+    d_start = math.hypot(target_m[0] - new_drone._x, target_m[1] - new_drone._y)
+
+    # Używamy nazw atrybutów zdefiniowanych w EvolutionStats
+    new_stats = EvolutionStats(initial_dist_m=d_start, min_dist_m=d_start)
+
+    class DummyGenome:
+        fitness = FIT_START_CAPITAL  #
+
+    return new_drone, new_stats, DummyGenome()
+
+
 def test_baseline() -> None:
-    """Odpala drona sterowanego ręcznym algorytmem, by zbadać działanie fitnessu."""
     pygame.init()
+    pygame.font.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("BIAI Drone Sim - HARDCODED BASELINE")
     clock = pygame.time.Clock()
+    font = pygame.font.SysFont("arial", 24)
 
-    # Inicjalizacja mózgu i drona
     brain = HardcodedBrain()
-    drone = Drone(
-        (SCREEN_WIDTH // 2) / PPM,
-        (SCREEN_HEIGHT // 2) / PPM,
-    )
 
-    target_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
-    obstacles = []  # Pusty układ na start
+    # Cel początkowy
+    target_px = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
+    target_m = (target_px[0] / PPM, target_px[1] / PPM)
+    obstacles = []
 
-    # Startowe metryki do fitnessu
-    d_start = math.hypot(target_pos[0] / PPM - drone._x, target_pos[1] / PPM - drone._y)
-    stats = EvolutionStats(initial_dist_m=d_start, min_dist_m=d_start)
-
-    # Atrapa genomu (klasa, do której będziemy zapisywać zmienną .fitness)
-    class DummyGenome:
-        fitness = FIT_START_CAPITAL
-
-    dummy_genome = DummyGenome()
+    drone, stats, dummy_genome = reset_test_drone(target_m)
 
     frames = 0
+    max_frames = FPS * SIMULATION_TIME  #
     run = True
 
     while run:
         dt = 1.0 / FPS
         frames += 1
         current_time_sec = frames / FPS
+        # time_decay analogiczny do tego w eval_genomes
+        time_decay = 1.0 - (0.8 * (frames / max_frames)) if max_frames > 0 else 1.0
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 run = False
-            # Prawy przycisk myszy losuje przeszkody, żebyś mógł sprawdzić jak w nie uderza
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                drone_pos_px: tuple[int, int] = cast(
-                    tuple[int, int], (drone._x * PPM, drone._y * PPM)
-                )
-                obstacles = generate_obstacles(
-                    drone_pos_px, target_pos, num_obstacles=4
-                )
-
-        # Cel podąża za kursorem
-        mx, my = pygame.mouse.get_pos()
-        target_px = (mx, my)
-        target_m = (mx / PPM, my / PPM)
-
-        # odświeżenie sensorów
-        _ = drone.get_sensor_data(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
-        # --- 'AI' MYŚLI ---
+                drone_pos_px = (int(drone._x * PPM), int(drone._y * PPM))
+                obstacles = generate_obstacles(drone_pos_px, target_px, num_obstacles=5)
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                target_px = pygame.mouse.get_pos()
+                target_m = (target_px[0] / PPM, target_px[1] / PPM)
+                # Restartujemy statystyki odległości dla nowego celu
+                d_curr = math.hypot(target_m[0] - drone._x, target_m[1] - drone._y)
+                stats.initial_dist_m = d_curr
+                stats.min_dist_m = d_curr
+        # 1. Sensory i Myślenie
+        _ = drone.get_sensor_data(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)  #
         output = brain.activate(drone, target_m)
-
-        # Fizyka
         drone.set_engine_thrust(output[0], output[1])
-        drone.update(dt)
 
-        # Obliczamy fitness co klatkę!
+        # 2. Fizyka
+        drone.update(dt)  #
         dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
+
+        # 3. Aktualizacja Fitness (zgodnie z sygnaturą w evolution.py)
+        # diff_mult ustawiamy na 1.0 dla prostoty testu baseline
         _update_fitness(
-            drone=drone,
-            stats=stats,
-            genome=dummy_genome,
+            drone,
+            stats,
+            dummy_genome,
+            target_m,
             dist_m=dist_m,
-            target_m=target_m,
             difficulty_multiplier=1.0,
             current_time_sec=current_time_sec,
             dt=dt,
-            time_decay=1.0,
+            time_decay=time_decay,
         )
 
-        # Jeśli dron się rozbił, resetujemy go (żebyś nie musiał restartować programu)
-        if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
+        # 4. Warunki końca / resetu
+        is_crashed = drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
+
+        # Sukces (Hovering) - używamy klatek, bo tak liczy EvolutionStats
+        is_success = False
+        if dist_m < (TARGET_SIZE_PX / PPM):
+            stats.hover_time += dt
+            if stats.hover_time >= HOVER_REQUIRED_SEC:  #
+                dummy_genome.fitness += FIT_HOVER_SUCCESS_BONUS  #
+                is_success = True
+        else:
+            stats.hover_time = 0
+
+        # Stagnacja
+        is_stagnated = stats.time_without_progress > STAGNATION_LIMIT_SEC
+
+        if is_crashed or is_success or is_stagnated or frames >= max_frames:
+            status = (
+                "KOLIZJA" if is_crashed else "SUKCES" if is_success else "TIMEOUT/STAG"
+            )
+            print(f"--- KONIEC PRÓBY: {status} ---")
             print(
-                f"BUM! Końcowy fitness przed zniszczeniem: {dummy_genome.fitness:.1f}"
-            )
-            drone = Drone(
-                (SCREEN_WIDTH // 2) / PPM,
-                (SCREEN_HEIGHT // 2) / PPM,
-            )
-            dummy_genome.fitness = FIT_START_CAPITAL
-            stats.min_dist_m = math.hypot(
-                target_m[0] - drone._x, target_m[1] - drone._y
-            )
-            frames = 0  # Reset czasu
-
-        render_simulation(screen, [drone], target_px, obstacles, PPM)
-
-        # Wypisywanie wyniku co 10 sekund (co 60 klatek)
-        if (frames / 10) % FPS == 0:
-            print(
-                f"T: {current_time_sec:.1f}s | Fitness: {dummy_genome.fitness:.1f} | Dystans: {dist_m:.2f}m"
+                f"Final Fitness: {dummy_genome.fitness:.1f} | Czas: {current_time_sec:.1f}s"
             )
 
+            # Reset symulacji
+            drone, stats, dummy_genome = reset_test_drone(target_m)
+            frames = 0
+            continue
+
+        # --- RYSOWANIE ---
+        render_simulation(screen, [drone], target_px, obstacles, PPM)  #
+
+        # UI Overlay
+        txt_fit = font.render(
+            f"Fitness: {dummy_genome.fitness:.1f}", True, (255, 255, 0)
+        )
+        txt_dist = font.render(f"Dystans: {dist_m:.2f} m", True, (0, 255, 255))
+        txt_time = font.render(f"Czas: {current_time_sec:.1f} s", True, (255, 255, 255))
+        screen.blit(txt_fit, (10, 10))
+        screen.blit(txt_dist, (10, 40))
+        screen.blit(txt_time, (10, 70))
+
+        pygame.display.flip()
         clock.tick(FPS)
 
     pygame.quit()

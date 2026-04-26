@@ -34,8 +34,8 @@ FIT_START_CAPITAL = 100.0
 # Kary
 SAFE_CRASH_SPEED_M_S = 0.5  # prędkość którą uznajemy za bezpieczną w zderzeniu
 FIT_CRASH_PENALTY_PERC = 0.75  # Zabiera ułamek kapitału przy uderzeniu
-FIT_CRASH_BASE_PENALTY = 10.0  # Kara punktowa - bazowa za rozbicie
-FIT_KAMIKAZE_PENALTY = 25.0
+FIT_CRASH_BASE_PENALTY = 5.0  # Kara punktowa - bazowa za rozbicie
+FIT_KAMIKAZE_PENALTY = 20.0
 FIT_LAZY_PENALTY = 1.0  # Kara punktowa co klatkę za brak ruchu (lenistwo)
 FIT_ESCAPE_PENALTY_PERC = (
     0.75  # Zabiera ułamek kapitału - kara za oddalenie się od startu (na koniec) -
@@ -75,8 +75,8 @@ FIT_HOVER_SUCCESS_BONUS = (
 FIT_SURVIVAL_BONUS_MULT = (
     1.5  # Bonus multiplier na koniec za zbliżenie się i przetrwanie
 )
-FIT_SPIN_PENALTY = 10.0  # Kara co klatkę, jeśli dron przesadzi z kręceniem
-MAX_ALLOWED_SPINS = 2.0  # Maksymalny obrót w jedną stronę po którym zaczynamy nabijać karę za kręcenie (2 pełne pętle)
+FIT_SPIN_PENALTY = 50.0  # Kara co klatkę, jeśli dron przesadzi z kręceniem
+MAX_ALLOWED_SPINS = 3.0  # Maksymalny obrót w jedną stronę po którym zaczynamy nabijać karę za kręcenie (2 pełne pętle)
 
 IDLE_LIMIT_SEC = 1.0
 STAGNATION_LIMIT_SEC = 2.5  # Limit czasu bez postępu w sekundach
