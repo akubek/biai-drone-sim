@@ -15,7 +15,7 @@ class Drone:
         mass: float = 0.8,  # [kg]
         width_m: float = 0.35,  # [m] - 35 cm szerokości
         height_m: float = 0.1,  # [m] - 10 cm wysokości
-        max_thrust: float = 15.0,  # [N] - max ciąg na JEDEN silnik (razem 30N)        torque_power: float = 0.5,
+        max_thrust: float = 8.0,  # [N] - max ciąg na JEDEN silnik (dla 15 razem 30N)        torque_power: float = 0.5,
         engine_offset_m: float = 0.175,  # [m] - ramię siły (odległość silnika od środka). Domyślnie połowa szerokości.
         engine_response_rate: float = 60.0,  # response rate const Hz
         # physics simulation parameters
@@ -24,8 +24,8 @@ class Drone:
         angular_drag: float = 0.05,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
         # sensor parameters
         distance_sensor_count: int = 16,  # amount of distance sensord (equally distributed)
-        radar_range: float = 1.0,  # [m]
-        close_radar: float = 0.35,
+        radar_range: float = 2.5,  # [m]
+        close_radar: float = 1.0,
         max_sensor_dist: float = 2.5,  # [m]
         raycast_step_m: float = 0.05,  # [m]
         PPM: float = 200,  # pixels per meter

@@ -32,6 +32,8 @@ class EvolutionStats:
     min_dist_m: float = 0.0
     hover_time: float = 0.0
     idle_time: float = 0.0
+    spinout_time: float = 0.0
+    last_stagnation_dist_m: float = 0.0
     time_without_progress: float = 0.0
     has_touched_target: bool = False
     accumulated_rotation: float = 0.0
@@ -86,7 +88,7 @@ def generate_start_and_target(
 
         dist = math.hypot(target_x - start_x, target_y - start_y)
 
-        if dist >= min_dist:
+        if dist >= min_dist * PPM:
             return start_pos, target_pos
 
 
@@ -193,21 +195,38 @@ def _update_and_eval_drone(
     dist_m: float = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
 
     # escape early check
-    if dist_m > stats.initial_dist_m + 2.0:
+    MAX_ALLOWED_ESCAPE_PERC = 0.5
+    if dist_m > stats.initial_dist_m * (1 + MAX_ALLOWED_ESCAPE_PERC):
         # genome_any.fitness *= 1 - FIT_ESCAPE_PENALTY_PERC
         return True
+
+    # siponout check
+    MAX_SAFE_ANGULAR_VEL = 4.0 * math.pi
+    MAX_ALLOWED_SPINOUT_TIME = 0.25
+    if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
+        stats.spinout_time += dt
+        if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
+            return True
+    else:
+        stats.spinout_time = 0
 
     # exploration bonus
     if dist_m < stats.min_dist_m:
         improvement = stats.min_dist_m - dist_m
-        # around 200m from target multiplier starts raising noticeably
-        dist_multiplier = time_multiplier = 1.0 + (400.0 / (200 + dist_m))
-        if improvement > FIT_STAGNATION_DISTANCE_LIMIT_M:
-            stats.time_without_progress = 0
-            genome_any.fitness += improvement * FIT_EXPLORATION_MULT * dist_multiplier
         stats.min_dist_m = dist_m
-    else:
-        stats.time_without_progress += dt
+        # around 1m from target multiplier starts raising noticeably
+        # todo - dist multiplier based on initial distance
+        progress_percentage = improvement / stats.initial_dist_m
+
+        dist_multiplier = 1.0 + (2.0 / (1.0 + dist_m))
+        genome_any.fitness += (
+            progress_percentage * FIT_EXPLORATION_MULT * dist_multiplier
+        )
+        if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
+            stats.time_without_progress = 0.0
+            stats.last_stagnation_dist_m = dist_m
+        else:
+            stats.time_without_progress += dt
 
     # check collision
     if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
@@ -219,35 +238,41 @@ def _update_and_eval_drone(
             0.95, FIT_CRASH_PENALTY_PERC * dist_coeff * kamikaze_mult
         )
         # if closer to target (dist_coeff lower) apply less penalty min, half (for now)
-        genome_any.fitness *= 1 - actual_penalty_perc
+        # genome_any.fitness *= 1 - actual_penalty_perc
         # less penalty if it crashed closer to the point
+        if genome_any.fitness > 0:
+            genome_any.fitness *= 1 - 0.1 * dist_coeff
         genome_any.fitness -= FIT_CRASH_BASE_PENALTY * dist_coeff
         # apply penalty if above safe speed
         if crash_speed > SAFE_CRASH_SPEED_M_S:
-            genome_any.fitness -= FIT_KAMIKAZE_PENALTY * (
-                crash_speed - SAFE_CRASH_SPEED_M_S
+            if genome_any.fitness > 0:
+                genome_any.fitness *= 1 - 0.2 * dist_coeff
+            genome_any.fitness -= (
+                FIT_KAMIKAZE_PENALTY * (crash_speed - SAFE_CRASH_SPEED_M_S) * dist_coeff
             )
         to_remove = True
 
     if dist_m < (TARGET_SIZE_PX / PPM):
+        stats.time_without_progress = 0  # reset stagnation time
         stats.hover_time += dt
         genome_any.fitness += (
-            dt * FIT_HOVER_REWARD * (1 + stats.hover_time * 0.1) * difficulty_multiplier
+            dt * FIT_HOVER_REWARD * (1 + stats.hover_time * 100) * difficulty_multiplier
         )
+        # Obliczamy nieliniowy mnożnik czasu (K=2.0)
         time_multiplier = 1.0 + (2.0 / (1.0 + current_time))
         if stats.hover_time >= HOVER_REQUIRED_SEC:
-            # Obliczamy nieliniowy mnożnik czasu (K=2.0)
-            genome_any.fitness += (
-                FIT_HOVER_SUCCESS_BONUS * time_multiplier * difficulty_multiplier
+            genome_any.fitness *= (
+                FIT_HOVER_SUCCESS_MULT * time_multiplier * difficulty_multiplier
             )
             to_remove = True
-        if not stats.has_touched_target:
-            stats.has_touched_target = True
-            genome_any.fitness += FIT_DISCOVERY_BONUS * time_multiplier
+        # no discovery bonus to avoid bullet behaviour
+        # if not stats.has_touched_target:
+        #    stats.has_touched_target = True
+        #    genome_any.fitness += FIT_DISCOVERY_BONUS * time_multiplier
     else:
         stats.hover_time = 0
         if stats.time_without_progress > STAGNATION_LIMIT_SEC:
-            genome_any.fitness *= 1 - FIT_STAGNATION_PENALTY_PERC
+            # genome_any.fitness *= 1 - FIT_STAGNATION_PENALTY_PERC
             to_remove = True
 
     return to_remove
@@ -272,8 +297,8 @@ def eval_genomes(
     # 2. Definiujemy nasze 3 rundy (Test Suite)
     scenarios: list[tuple[str, int]] = [
         ("Runda 1: Otwarte Niebo", 0),
-        ("Runda 2: Standard", 2),
-        ("Runda 3: Tor Przeszkód", 4),
+        # ("Runda 2: Standard", 3),
+        # ("Runda 3: Tor Przeszkód", 4),
     ]
 
     expert = HardcodedBrain()
@@ -292,7 +317,7 @@ def eval_genomes(
             random.randint(100, SCREEN_HEIGHT - 100),
         )
         start_px, target_px = generate_start_and_target(
-            SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DISTANCE_PX
+            SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
         )
         target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
         obstacles = generate_obstacles(start_px, target_px, num_obs)
@@ -329,30 +354,30 @@ def eval_genomes(
         max_retries = 50  # Zabezpieczenie przed nieskończoną pętlą
         attempts = 0
 
-        while not valid_map_found and attempts < max_retries:
-            attempts += 1
+        # while not valid_map_found and attempts < max_retries:
+        #   attempts += 1
 
-            # 1. Losujemy pozycje
-            start_px, target_px = generate_start_and_target(
-                SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DISTANCE_PX
-            )
-            # 2. Losujemy przeszkody
-            obstacles = generate_obstacles(start_px, target_px, num_obs)
+        # 1. Losujemy pozycje
+        #    start_px, target_px = generate_start_and_target(
+        #        SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
+        #    )
+        # 2. Losujemy przeszkody
+        #    obstacles = generate_obstacles(start_px, target_px, num_obs)
 
-            # 3. Pytamy eksperta, czy da się to w ogóle przelecieć
-            expert_path = get_expert_path(
-                start_px, target_px, obstacles, drone_radius_px=15
-            )
+        # 3. Pytamy eksperta, czy da się to w ogóle przelecieć
+        #    expert_path = get_expert_path(
+        #        start_px, target_px, obstacles, drone_radius_px=15
+        #    )
 
-            if expert_path:
-                valid_map_found = True
+        #    if expert_path:
+        #        valid_map_found = True
 
-        if not valid_map_found:
-            print(
-                f"Ostrzeżenie: Nie udało się wygenerować mapy po {max_retries} próbach! Lecimy na pustej mapie."
-            )
-            obstacles = []  # Awaryjne wyczyszczenie mapy
-            expert_path = [start_px, target_px]  # Ścieżka prosta
+        # if not valid_map_found:
+        #    print(
+        #        f"Ostrzeżenie: Nie udało się wygenerować mapy po {max_retries} próbach! Lecimy na pustej mapie."
+        #    )
+        #    obstacles = []  # Awaryjne wyczyszczenie mapy
+        #    expert_path = [start_px, target_px]  # Ścieżka prosta
 
         # Odległość w linii prostej
         straight_dist = math.hypot(
@@ -360,15 +385,17 @@ def eval_genomes(
         )
 
         # Obliczamy faktyczną długość wyznaczonej ścieżki
-        path_length = 0
-        current_pt = start_px
-        for pt in expert_path:
-            path_length += math.hypot(pt[0] - current_pt[0], pt[1] - current_pt[1])
-            current_pt = pt
+        # path_length = 0
+        # current_pt = start_px
+        # for pt in expert_path:
+        #    path_length += math.hypot(pt[0] - current_pt[0], pt[1] - current_pt[1])
+        #    current_pt = pt
 
         # Wyliczamy mnożnik trudności (Tortuosity)
         # Jeśli ścieżka omija przeszkody, będzie dłuższa niż prosta, np. stosunek 1.5
-        diff_mult = max(1.0, path_length / straight_dist)
+        # diff_mult = max(1.0, path_length / straight_dist)
+
+        diff_mult = 1.0
 
         # loop over drones each frame
         while current_frame < max_frames and drones:
@@ -646,7 +673,7 @@ def test_baseline() -> None:
         if dist_m < (TARGET_SIZE_PX / PPM):
             stats.hover_time += dt
             if stats.hover_time >= HOVER_REQUIRED_SEC:  #
-                dummy_genome.fitness += FIT_HOVER_SUCCESS_BONUS  #
+                dummy_genome.fitness *= FIT_HOVER_SUCCESS_MULT  #
                 is_success = True
         else:
             stats.hover_time = 0
