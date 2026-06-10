@@ -1,7 +1,7 @@
 [NEAT]
 fitness_criterion     = max
 fitness_threshold     = 100000
-pop_size              = 300
+pop_size              = 512
 reset_on_extinction   = True
 no_fitness_termination = True
 
@@ -63,11 +63,12 @@ feed_forward            = True
 initial_connection      = full
 
 # Opcje kompatybilności genomów
-compatibility_disjoint_coefficient = 1.5
+compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.1
 
 [DefaultSpeciesSet]
-compatibility_threshold = 6.0
+compatibility_threshold = 3.6
+
 
 [DefaultStagnation]
 species_fitness_func = max
@@ -75,5 +76,5 @@ max_stagnation       = 40
 species_elitism      = 2
 
 [DefaultReproduction]
-elitism            = 2
+elitism            = 1
 survival_threshold = 0.3

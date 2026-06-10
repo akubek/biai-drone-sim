@@ -215,13 +215,12 @@ def _update_and_eval_drone(
         improvement = stats.min_dist_m - dist_m
         stats.min_dist_m = dist_m
         # around 1m from target multiplier starts raising noticeably
-        # todo - dist multiplier based on initial distance
-        progress_percentage = improvement / stats.initial_dist_m
+        # todo - dist multiplier based on initial distance?
+        # progress_percentage = improvement / stats.initial_dist_m
 
+        # the closer to the target the more points for progress
         dist_multiplier = 1.0 + (2.0 / (1.0 + dist_m))
-        genome_any.fitness += (
-            progress_percentage * FIT_EXPLORATION_MULT * dist_multiplier
-        )
+        genome_any.fitness += improvement * FIT_EXPLORATION_MULT * dist_multiplier
         if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
             stats.time_without_progress = 0.0
             stats.last_stagnation_dist_m = dist_m
@@ -580,6 +579,16 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
         output = net.activate(inputs)
         drone.set_engine_thrust(output[0], output[1])
         drone.update(1.0 / FPS)
+
+        is_crashed = drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
+
+        if is_crashed:
+            status = "Kolizja"
+            print(f"--- KONIEC PRÓBY: {status} ---")
+            # Reset symulacji
+            drone, stats, dummy_genome = reset_test_drone(target_m)
+            frames = 0
+            continue
 
         render_simulation(screen, [drone], target_px, obstacles, PPM)
         clock.tick(FPS)
