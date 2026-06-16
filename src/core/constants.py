@@ -44,18 +44,18 @@ FIT_EXPERT_PENALTY_MULT = 10.0
 FIT_STAGNATION_PENALTY_PERC = (
     0.25  #  Kara procentowa na koniec za brak postępu po X sekund
 )
-FIT_STAGNATION_DISTANCE_LIMIT_M = 0.1  # limit poprawy wyniku odległości w [m] poniżej którego stwierdza że dron się nie poprawia
+FIT_STAGNATION_DISTANCE_LIMIT_M = 0.5  # limit poprawy wyniku odległości w [m] poniżej którego stwierdza że dron się nie poprawia
 
 ESCAPE_LIMIT = 2.0  # limit ile moze oldeciec od celu wzgledem poczatkowej pozycji
 
 # Nagrody i bonusy
-# FIT_DISCOVERY_BONUS = 1000.0  # Jednorazowa nagroda za dotknięcie celu
-FIT_EXPLORATION_MULT = 500.0  # Max punkty za całą drogę do celu [pkt]
-FIT_HOVER_REWARD = 1000.0  # Nagroda za utrzymanie się w strefie celu [pkt/sek]
-FIT_HOVER_SUCCESS_MULT = 5  # mnożnik nagrody za wykonanie zadania
+FIT_DISCOVERY_BONUS = 50.0  # Jednorazowa nagroda za dotknięcie celu
+FIT_EXPLORATION_MULT = 10.0  # Max punkty za całą drogę do celu [pkt]
+FIT_HOVER_REWARD = 200.0  # Nagroda za utrzymanie się w strefie celu [pkt/sek]
+FIT_HOVER_SUCCESS_REWARD = 500.0  # Płaska nagroda za ukończenie zadania
 
 IDLE_LIMIT_SEC = 1.0
 STAGNATION_LIMIT_SEC = 2.0  # Limit czasu bez postępu w sekundach
 HOVER_REQUIRED_SEC = 1.5  # Wymagany czas by uznać zadanie za wykonane
 
-EVOLUTION_CYCLES = 400
+EVOLUTION_CYCLES = 200

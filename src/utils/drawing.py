@@ -34,3 +34,4 @@ def draw_vector(
     )
 
     _ = pygame.draw.polygon(screen, color, [(end_x, end_y), p1, p2])
+

@@ -1,7 +1,7 @@
 import math
 import pygame
 
-from .utils import draw_vector
+from ..utils.drawing import draw_vector
 from .constants import *
 
 
@@ -15,7 +15,7 @@ class Drone:
         mass: float = 0.8,  # [kg]
         width_m: float = 0.35,  # [m] - 35 cm szerokości
         height_m: float = 0.1,  # [m] - 10 cm wysokości
-        max_thrust: float = 8.0,  # [N] - max ciąg na JEDEN silnik (dla 15 razem 30N)        torque_power: float = 0.5,
+        max_thrust: float = 15.0,  # [N] - max ciąg na JEDEN silnik (dla 15 razem 30N)        torque_power: float = 0.5,
         engine_offset_m: float = 0.175,  # [m] - ramię siły (odległość silnika od środka). Domyślnie połowa szerokości.
         engine_response_rate: float = 60.0,  # response rate const Hz
         # physics simulation parameters
@@ -23,9 +23,7 @@ class Drone:
         drag_coeff: float = 0.5,  # [kg/s]        angular_drag: float = 0.0,
         angular_drag: float = 0.05,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
         # sensor parameters
-        distance_sensor_count: int = 16,  # amount of distance sensord (equally distributed)
-        radar_range: float = 1.25,  # [m]
-        close_radar: float = 0.25,
+        distance_sensor_count: int = 8,  # amount of distance sensord (equally distributed)
         max_sensor_dist: float = 2.5,  # [m]
         raycast_step_m: float = 0.1,  # [m]
         PPM: float = 200,  # pixels per meter
@@ -40,8 +38,6 @@ class Drone:
         self.drag_coeff: float = drag_coeff
         self.angular_drag: float = angular_drag
 
-        self.radar_range: float = radar_range
-        self.close_radar: float = close_radar
         self.max_sensor_dist: float = max_sensor_dist
         self.raycast_step_m: float = raycast_step_m
 
@@ -109,14 +105,6 @@ class Drone:
         _ = pygame.draw.circle(
             self._base_surf, (255, 255, 255), (px_width / 2, px_height * 0.25), 2
         )
-
-        # --- PRE-RENDER RADAR SURFACE ---
-        # Tworzymy płótno dla radaru tylko raz, by uniknąć alokacji pamięci co klatkę
-        r_size_px = int(self.radar_range * PPM * 2)
-        self._radar_surf: pygame.Surface = pygame.Surface(
-            (r_size_px, r_size_px), pygame.SRCALPHA
-        )
-        self._radar_radius_px: int = int(self.radar_range * PPM)
 
     def get_sensor_data(
         self,
@@ -317,7 +305,6 @@ class Drone:
         target_pos_m: tuple[float, float],
         PPM: float,
         # Flagi kontrolujące co rysujemy
-        show_radar: bool = False,
         show_sensors: bool = True,
         show_thrust: bool = True,
         show_hitbox: bool = False,
@@ -331,9 +318,6 @@ class Drone:
         px_x = int(self._x * PPM)
         px_y = int(self._y * PPM)
 
-        if show_radar:
-            self._draw_radar(screen, target_pos_m, px_x, px_y)
-
         if show_sensors:
             self._draw_sensors(screen, px_x, px_y, PPM)
 
@@ -346,46 +330,6 @@ class Drone:
         if show_hitbox:
             radius_px = int((self.width_m / 2) * PPM)
             _ = pygame.draw.circle(screen, (255, 0, 255), (px_x, px_y), radius_px, 1)
-
-    def _draw_radar(
-        self,
-        screen: pygame.Surface,
-        target_pos_m: tuple[float, float],
-        px_x: int,
-        px_y: int,
-    ) -> None:
-        dist_to_target_m = math.hypot(
-            target_pos_m[0] - self._x, target_pos_m[1] - self._y
-        )
-        radar_val = max(0.0, 1.0 - (dist_to_target_m / self.radar_range))
-
-        if radar_val > 0:
-            # 1. ZAMIAST tworzyć nową powierzchnię, CZYŚCIMY starą (wypełniamy przezroczystością)
-            _ = self._radar_surf.fill((0, 0, 0, 0))
-
-            # 2. Rysujemy na wyczyszczonym płótnie
-            alpha_fill = int(150 * radar_val)
-            _ = pygame.draw.circle(
-                self._radar_surf,
-                (0, 255, 100, alpha_fill),
-                (self._radar_radius_px, self._radar_radius_px),
-                self._radar_radius_px,
-            )
-
-            border_thickness = max(1, int(3 * radar_val))
-            _ = pygame.draw.circle(
-                self._radar_surf,
-                (0, 255, 100, 255),
-                (self._radar_radius_px, self._radar_radius_px),
-                self._radar_radius_px,
-                border_thickness,
-            )
-
-            # 3. Szybki, bezpieczny blit na ekran główny
-            _ = screen.blit(
-                self._radar_surf,
-                (px_x - self._radar_radius_px, px_y - self._radar_radius_px),
-            )
 
     def _draw_sensors(
         self, screen: pygame.Surface, px_x: int, px_y: int, PPM: float
@@ -450,6 +394,7 @@ class Drone:
         rect = rotated_drone.get_rect(center=(px_x, px_y))
         _ = screen.blit(rotated_drone, rect.topleft)
 
+
     def get_inputs(
         self,
         target_pos_m: tuple[float, float],
@@ -457,54 +402,43 @@ class Drone:
         screen_height_px: int,
         obstacles: list[pygame.Rect],
         PPM: float,
+        use_cascade: bool = True,
     ) -> list[float]:
-        # distance sensor data
-        sensors: list[float] = self.get_sensor_data(
-            screen_width_px, screen_height_px, obstacles, PPM
-        )
+        # 1. ZMYSŁY PRZESTRZENNE (Czujniki przeszkód)
+        sensors = self.get_sensor_data(screen_width_px, screen_height_px, obstacles, PPM)
+        normalized_sensors = [d / self.max_sensor_dist for d in sensors]
 
-        # get_sensor_data, already saves last sensor_data
-        # self.last_sensor_data = sensors
-        # normalize sensor data [0,max length] -> [0,1]
-        normalized_sensors: list[float] = [d / self.max_sensor_dist for d in sensors]
-
-        # relative speed [m/s] (Body-Fixed Frame)
-        speed_m_s = math.hypot(self._vel_x, self._vel_y)
-        # normalize speed expecting 15 m/s to be the reasonable maximum
-        norm_speed = min(1.0, speed_m_s / 15.0)
-
-        # velocity angle in world view
-        vel_angle_rad = math.atan2(self._vel_y, self._vel_x)
-
-        # difference in angles
-        rel_vel_angle = vel_angle_rad - self._angle
-
-        # to range [-pi, pi]
-        rel_vel_angle = (rel_vel_angle + math.pi) % (2 * math.pi) - math.pi
-
-        # angle sin and cos - avoid sudden jump in the angle
-        v_sin = math.sin(rel_vel_angle)
-        v_cos = math.cos(rel_vel_angle)
-
-        # world sin and cos
+        # 2. PRĘDKOŚĆ LOKALNA (Względem drona, a nie mapy świata)
+        # s_angle / c_angle przeliczają wektor z mapy na to, co dron "czuje"
         s_angle = math.sin(self._angle)
         c_angle = math.cos(self._angle)
+        
+        # Oś Y drona (przód/tył), Oś X drona (lewo/prawo)
+        local_vx = (self._vel_x * c_angle) + (self._vel_y * s_angle)
+        local_vy = (-self._vel_x * s_angle) + (self._vel_y * c_angle)
+        
+        # Normalizacja prędkości (zakładamy 15 m/s za max)
+        norm_local_vx = max(-1.0, min(1.0, local_vx / 15.0))
+        norm_local_vy = max(-1.0, min(1.0, local_vy / 15.0))
+        
+        # Prędkość kątowa
+        norm_angular_vel = math.tanh(self._angular_vel / 5.0)
 
-        # angle and distance to target in meters
+        # 3. ABSOLUTNA POZYCJA I GRAWITACJA
+        # Sieć musi wiedzieć jak jest przechylona względem pionu (grawitacji)
+        # Zostawiamy czyste sin i cos kąta drona
+        
+        # 4. CEL LOKALNY
         target_x_m, target_y_m = target_pos_m
         dx = target_x_m - self._x
         dy = target_y_m - self._y
 
-        # normalized distnce (0.0 is center of the target, 1.0 is screen diagonal)
+        # Odległość do celu
         max_dist_m = math.hypot(screen_width_px / PPM, screen_height_px / PPM)
         dist_m = math.hypot(dx, dy)
         norm_dist = dist_m / max_dist_m
 
-        # radar
-        proximity_radar = max(0.0, 1.0 - (dist_m / self.radar_range))
-        proximity_radar2 = max(0.0, 1.0 - (dist_m / self.close_radar))
-
-        # relative angle to target
+        # Kąt do celu Z PUNKTU WIDZENIA DRONA
         target_angle_rad = math.atan2(dy, dx)
         diff_angle = target_angle_rad - self._angle
         diff_angle = (diff_angle + math.pi) % (2 * math.pi) - math.pi  # to [-pi, pi]
@@ -512,21 +446,22 @@ class Drone:
         sin_targ = math.sin(diff_angle)
         cos_targ = math.cos(diff_angle)
 
-        norm_angular_vel = math.tanh(self._angular_vel / 5.0)
-
-        # Łączymy wszystko w jedną listę (Input Layer)
-        return normalized_sensors + [
-            norm_speed,
-            v_sin,
-            v_cos,
+        # 1. Baza - 16 optymalnych wejść, które działają zawsze
+        base_inputs = normalized_sensors + [
+            norm_local_vx,
+            norm_local_vy,
+            norm_angular_vel,
             s_angle,
             c_angle,
             norm_dist,
-            proximity_radar,
-            proximity_radar2,
             sin_targ,
             cos_targ,
-            self.actual_l_thrust,
-            self.actual_r_thrust,
-            norm_angular_vel,
         ]
+
+        # 2. Dynamiczne rozszerzenie wejść dla trybu End-to-End
+        if not use_cascade:
+            # Dodajemy stan silników tylko wtedy, gdy NIE używamy kontrolera lotu
+            base_inputs.extend([self.actual_l_thrust, self.actual_r_thrust])
+
+        return base_inputs
+    
