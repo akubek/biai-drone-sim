@@ -21,7 +21,7 @@ from src.core.map_generator import generate_grid_obstacles
 from src.pathfinding import get_expert_path
 from src.core.stats import EvolutionStats
 from src.core.environment import generate_start_and_target
-from src.utils.renderer import render_simulation
+from src.utils.renderer import render_neat_hud, render_simulation
 
 from src.config.config import *
 from src.config.evolution import *
@@ -29,7 +29,7 @@ from src.config.physics import *
 from src.config.rewards import *
 
 pygame.font.init()
-STAT_FONT = pygame.font.SysFont("arial", 50)
+font = pygame.font.SysFont("arial", 10)
 
 show_simulation = True
 generation_count = 0
@@ -38,6 +38,7 @@ generation_count = 0
 render_graphics = True
 target_fps = FPS
 uncapped = False
+
 
 USE_FLIGHT_CONTROLLER = False
 global_flight_controller = FlightController()
@@ -255,6 +256,9 @@ def step_training_drone(
     obstacles: list[pygame.Rect],
     difficulty_multiplier: float,
     use_cascade: bool,
+    SCREEN_WIDTH: int = SCREEN_WIDTH,
+    SCREEN_HEIGHT: int = SCREEN_HEIGHT,
+    PPM: float = PPM
 ) -> tuple[bool, bool]:
     #current_time = current_frame * dt
     to_remove = False
@@ -352,6 +356,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
     global render_graphics
     global target_fps
     global uncapped
+    global font
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
 
@@ -366,9 +371,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
     #do przemyślenia zachowanie eksperta, oceny fitnessu po przejściu do trudniejszych scenariuszy
 
     for genome_id, genome in genomes:
-        cast(
-            Any, genome
-        ).fitness = FIT_START_CAPITAL  # lub np. 0.0, jeśli użyjesz akumulacji
+        cast(Any, genome).fitness = FIT_START_CAPITAL
 
     # 2. Definiujemy nasze 3 rundy (Test Suite)
     scenarios: list[tuple[str, int]] = [
@@ -376,6 +379,8 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         # ("Runda 2: Standard", 3),
         # ("Runda 3: Tor Przeszkód", 4),
     ]
+
+    total_population = len(genomes)
     
     for round_name, num_obs in scenarios:
         saved_fitness = {genome_id: cast(Any, g).fitness for genome_id, g in genomes}
@@ -410,10 +415,12 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         max_frames = FPS * SIMULATION_TIME
         dt = 1.0 / FPS
         current_frame = 0
+        max_best_fitness = 0.0
 
         while current_frame < max_frames and drones:
             current_frame += 1
-            
+            current_time_sec = current_frame * dt
+
             # 1. ZARZĄDZANIE CZASEM
             if not uncapped:
                 clock.tick(target_fps)
@@ -450,6 +457,9 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     obstacles=obstacles,
                     difficulty_multiplier=1.0,
                     use_cascade=is_cascade,
+                    SCREEN_WIDTH=SCREEN_WIDTH,
+                    SCREEN_HEIGHT=SCREEN_HEIGHT,
+                    PPM=PPM
                 )
                 if should_remove:
                     to_remove.append(i)
@@ -459,10 +469,21 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
             # 4. RENDEROWANIE ODPINANE
             if render_graphics:
+                current_best_fitness = max([cast(Any, g).fitness for g in ge]) if ge else 0.0
+                max_best_fitness = current_best_fitness if current_best_fitness > max_best_fitness else max_best_fitness
                 render_simulation(screen, drones, target_px, obstacles, PPM)
+                render_neat_hud(
+                    screen=screen,
+                    font=font,
+                    generation=generation_count,
+                    alive_count=len(drones),
+                    pop_size=total_population,
+                    best_fitness=max_best_fitness,
+                    current_time_sec=current_time_sec
+                )
                 # Możesz dodać proste info na ekranie:
                 # font.render(f"FPS: {int(clock.get_fps())} | Render: {render_graphics}", ...)
-                clock.tick(FPS)
+                pygame.display.flip()
         
         # Koniec rundy! Dodajemy wynik z tej rundy do tego, co zapisaliśmy wcześniej
         # todo - ewentualnie naliczyć premie za trudność - mnożnik na podstawie eksperta albo inny

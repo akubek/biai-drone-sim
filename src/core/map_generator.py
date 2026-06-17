@@ -2,6 +2,10 @@ import pygame
 import random
 from collections import deque
 
+import math
+
+from src.config.config import TARGET_SIZE_PX
+
 def _get_grid_coords(px_pos: tuple[int, int], grid_size: int) -> tuple[int, int]:
     """Zwraca indeks (kolumna, wiersz) dla danej pozycji w pikselach."""
     return px_pos[0] // grid_size, px_pos[1] // grid_size
@@ -53,6 +57,8 @@ def generate_grid_obstacles(
     # 1. Inicjalizacja pustej siatki
     grid = [[False for _ in range(rows)] for _ in range(cols)]
     
+    safe_zone_m: float = grid_size_m / 2.0 + 0.2 # half of grid cell + hald of drone size (drone size = 0.35 + margin)
+
     # 2. Tworzymy listę wszystkich dozwolonych komórek (poza safe zone)
     available_cells = []
     for x in range(cols):
@@ -63,6 +69,18 @@ def generate_grid_obstacles(
             if dist_to_start > safe_zone and dist_to_target > safe_zone:
                 available_cells.append((x, y))
 
+            # 1. Obliczamy fizyczny środek kafelka w metrach
+            cell_center_x_m = (x * grid_size_px + grid_size_px / 2) / PPM
+            cell_center_y_m = (y * grid_size_px + grid_size_px / 2) / PPM
+            
+            # 2. Prawdziwa odległość euklidesowa (w metrach) od drona i celu
+            dist_to_start_m = math.hypot(cell_center_x_m - start_px[0] / PPM, cell_center_y_m - start_px[1] / PPM)
+            dist_to_target_m = math.hypot(cell_center_x_m - target_px[0] / PPM, cell_center_y_m - target_px[1] / PPM)
+            
+            # 3. Dodajemy komórkę tylko, jeśli jej środek jest fizycznie bezpiecznie oddalony
+            if dist_to_start_m > safe_zone_m and dist_to_target_m > safe_zone_m:
+                available_cells.append((x, y))
+
     # 3. Przemieszanie indeksów (losowość mapy)
     random.shuffle(available_cells)
 
@@ -70,7 +88,6 @@ def generate_grid_obstacles(
     obstacles_placed = 0
     
     for x, y in available_cells:
-        print(f"Próba postawienia przeszkody na ({x}, {y})... \n")
         if obstacles_placed >= max_obstacles:
             break  # Osiągnęliśmy cel!
             
@@ -88,7 +105,6 @@ def generate_grid_obstacles(
     for x in range(cols):
         for y in range(rows):
             if grid[x][y]:
-                print(f"Przeszkoda na ({x}, {y}) została zatwierdzona. \n")
                 rect = pygame.Rect(x * grid_size_px, y * grid_size_px, grid_size_px, grid_size_px)
                 obstacles.append(rect)
 
