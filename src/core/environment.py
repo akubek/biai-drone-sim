@@ -1,7 +1,7 @@
 import random
 import pygame
 import math
-from .constants import SCREEN_WIDTH, SCREEN_HEIGHT, PPM
+from src.config.config import SCREEN_WIDTH, SCREEN_HEIGHT, PPM
 
 def generate_start_and_target(width: int, height: int, margin: int, min_dist: float) -> tuple[tuple[int, int], tuple[int, int]]:
     """Generuje bezpieczny punkt startowy i docelowy."""

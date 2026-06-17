@@ -4,7 +4,7 @@ import math
 
 # Dostosuj importy do nowej struktury
 from src.core.drone import Drone
-from src.core.constants import SCREEN_WIDTH, SCREEN_HEIGHT
+from src.config.config import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.flight_controller import FlightController
 
 def test_manual_flight():
@@ -21,11 +21,6 @@ def test_manual_flight():
 
     # Inicjalizacja kontrolera lotu do trybu z asystą
     controller = FlightController()
-    
-    # Zmienne sterujące w trybie z kontrolerem
-    target_angle_deg = 0.0
-    target_thrust = 0.0
-    base_hover = (drone.mass * drone.gravity) / (2 * drone.max_thrust)
 
     mode = "CASCADE" # lub "RAW"
     font = pygame.font.SysFont("arial", 24)
@@ -90,16 +85,15 @@ def test_manual_flight():
             pygame.draw.rect(screen, (150, 50, 50), obs)
             pygame.draw.rect(screen, (255, 100, 100), obs, 2)
 
-        drone.draw(screen, target_pos_m, PPM, show_radar=False, show_sensors=True, show_thrust=True)
+        drone.draw(screen, target_pos_m, PPM, show_sensors=True, show_thrust=True)
 
         # UI Overlay
+        txt_info = font.render(f"Space to change mode between manual and cascade(flight controller)", True, (255, 255, 255))
+        screen.blit(txt_info, (10, 10))
+
         color = (0, 255, 0) if mode == "CASCADE" else (255, 0, 0)
         txt_mode = font.render(f"MODE: {mode}", True, color)
-        screen.blit(txt_mode, (10, 10))
-
-        if mode == "CASCADE":
-            txt_info = font.render(f"Target angle: {target_angle_deg}st", True, (255, 255, 255))
-            screen.blit(txt_info, (10, 40))
+        screen.blit(txt_mode, (10, 40))
 
         pygame.display.flip()
 

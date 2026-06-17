@@ -1,4 +1,4 @@
-from src.core.constants import TARGET_SIZE_PX
+from src.config.config import TARGET_SIZE_PX
 
 
 import pygame

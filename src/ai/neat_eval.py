@@ -16,12 +16,16 @@ from pygame.math import clamp
 
 from src.core.flight_controller import FlightController
 from src.core.drone import Drone
-from src.core.constants import *
 from src.ai.expert import HardcodedBrain
 from src.pathfinding import get_expert_path
 from src.core.stats import EvolutionStats
 from src.core.environment import generate_obstacles, generate_start_and_target
 from src.utils.renderer import render_simulation
+
+from src.config.config import *
+from src.config.evolution import *
+from src.config.physics import *
+from src.config.rewards import *
 
 pygame.font.init()
 STAT_FONT = pygame.font.SysFont("arial", 50)
@@ -180,8 +184,6 @@ def _update_and_eval_drone(
         return True
 
     # siponout check
-    MAX_SAFE_ANGULAR_VEL = 4.0 * math.pi
-    MAX_ALLOWED_SPINOUT_TIME = 0.25
     if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
         stats.spinout_time += dt
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
@@ -194,8 +196,6 @@ def _update_and_eval_drone(
         improvement = stats.min_dist_m - dist_m
         stats.min_dist_m = dist_m
         # around 1m from target multiplier starts raising noticeably
-        # todo - dist multiplier based on initial distance?
-        # progress_percentage = improvement / stats.initial_dist_m
 
         # the closer to the target the more points for progress
         dist_multiplier = 1.0 + (2.0 / (1.0 + dist_m))
@@ -209,7 +209,7 @@ def _update_and_eval_drone(
         stats.time_without_progress += dt
 
     # ==========================================
-    # CHECK COLLISION (Zderzenie)
+    # CHECK COLLISION
     # ==========================================
     if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
         

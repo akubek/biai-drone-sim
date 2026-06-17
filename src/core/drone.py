@@ -1,8 +1,7 @@
 import math
 import pygame
 
-from ..utils.drawing import draw_vector
-from .constants import *
+from src.utils.drawing import draw_vector
 
 
 class Drone:

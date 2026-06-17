@@ -7,12 +7,14 @@ from typing import cast, Any
 import neat
 
 from src.core.drone import Drone
-from src.core.constants import *
 from src.core.flight_controller import FlightController
 from src.ai.expert import HardcodedBrain
 from src.core.stats import EvolutionStats
 from src.core.environment import generate_obstacles, generate_start_and_target
 from src.utils.renderer import render_simulation
+from src.config.config import *
+from src.config.rewards import *
+from src.config.evolution import *
 
 
 def reset_test_drone(target_m: tuple[float, float]) -> tuple[Drone, EvolutionStats, Any]:
