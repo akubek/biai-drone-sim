@@ -12,6 +12,7 @@ from src.ai.expert import HardcodedBrain
 from src.core.stats import EvolutionStats
 from src.core.environment import generate_obstacles, generate_start_and_target
 from src.utils.renderer import render_simulation
+from src.ai.neat_eval import apply_fitness_rules
 from src.config.config import *
 from src.config.rewards import *
 from src.config.evolution import *
@@ -19,14 +20,20 @@ from src.config.evolution import *
 
 def reset_test_drone(target_m: tuple[float, float]) -> tuple[Drone, EvolutionStats, Any]:
     """Pomocnicza funkcja do tworzenia świeżych obiektów po resecie."""
-    new_drone = Drone((SCREEN_WIDTH // 2) / PPM, (SCREEN_HEIGHT // 2) / PPM)
+    start_x = (SCREEN_WIDTH // 2) / PPM
+    start_y = (SCREEN_HEIGHT // 2) / PPM
+    new_drone = Drone(start_x, start_y)
     d_start = math.hypot(target_m[0] - new_drone._x, target_m[1] - new_drone._y)
+
+    world_diagonal_m = math.hypot(SCREEN_WIDTH / PPM, SCREEN_HEIGHT / PPM)
+    allowed_escape_dist = d_start + (world_diagonal_m * 0.6)
 
     new_stats = EvolutionStats(
         initial_dist_m=d_start, 
         min_dist_m=d_start,
         last_stagnation_dist_m=d_start,
-        max_hover_time_achieved=0.0
+        max_hover_time_achieved=0.0,
+        max_allowed_escape_dist_m=allowed_escape_dist
     )
 
     class DummyGenome:
@@ -97,7 +104,7 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
 
         if is_crashed:
             print("--- KONIEC PRÓBY: Kolizja ---")
-            drone, _, _ = reset_test_drone(target_m)
+            drone, stats, genome = reset_test_drone(target_m)
             continue
 
         render_simulation(screen, [drone], target_px, obstacles, PPM)
@@ -123,7 +130,7 @@ def test_baseline() -> None:
     target_m = (target_px[0] / PPM, target_px[1] / PPM)
     obstacles = []
 
-    drone, stats, dummy_genome = reset_test_drone(target_m)
+    drone, stats, genome = reset_test_drone(target_m)
 
     frames = 0
     max_frames = FPS * SIMULATION_TIME 
@@ -145,7 +152,7 @@ def test_baseline() -> None:
                 target_m = (target_px[0] / PPM, target_px[1] / PPM)
                 # Szybki reset statystyk by Ekspert dostał poprawny cel
                 d_curr = math.hypot(target_m[0] - drone._x, target_m[1] - drone._y)
-                stats = EvolutionStats(initial_dist_m=d_curr, min_dist_m=d_curr, last_stagnation_dist_m=d_curr, max_hover_time_achieved=0.0)
+                drone, stats, genome = reset_test_drone(target_m)
 
         # 1. Sensory
         _ = drone.get_sensor_data(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
@@ -163,16 +170,26 @@ def test_baseline() -> None:
         drone.update(dt)
         dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
 
-        # Proste warunki końca
-        is_crashed = drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
-        is_success = dist_m < (TARGET_SIZE_PX / PPM)
+        # Ewaluacja
+        success, should_stop = apply_fitness_rules(
+            drone=drone,
+            stats=stats,
+            genome=genome,
+            target_m=target_m,
+            dt=dt,
+            obstacles=obstacles,
+            difficulty_multiplier=1.0,
+            SCREEN_WIDTH=SCREEN_WIDTH,
+            SCREEN_HEIGHT=SCREEN_HEIGHT,
+            PPM=PPM
+        )
 
-        if is_crashed or is_success or frames >= max_frames:
-            status = "KOLIZJA" if is_crashed else "SUKCES" if is_success else "TIMEOUT"
-            print(f"--- KONIEC PRÓBY: {status} | Czas: {current_time_sec:.1f}s ---")
-            drone, stats, _ = reset_test_drone(target_m)
+        if should_stop or success or frames >= max_frames:
+            status = "SUKCES" if success else "KOLIZJA/EWALUACJA" if should_stop else "TIMEOUT"
+            print(f"--- KONIEC PRÓBY: {status} | Czas: {current_time_sec:.1f}s | Punkty: {genome.fitness:.1f} ---")
+
+            drone, stats, genome = reset_test_drone(target_m)
             frames = 0
-            continue
 
         # WIZUALIZACJA
         render_simulation(screen, [drone], target_px, obstacles, PPM)

@@ -5,7 +5,7 @@ from src.core.drone import Drone
 class FlightController:
     """Low level PID controller converting desired flight vector to motor thrusts."""
     
-    def __init__(self, turn_p_gain: float = 0.015, turn_d_gain: float = 0.010, max_turn_force: float = 0.6) -> None:
+    def __init__(self, turn_p_gain: float = 0.015, turn_d_gain: float = 0.010, max_turn_force: float = 0.5) -> None:
         # Store PID parameters as class properties
         self.turn_p_gain = turn_p_gain
         self.turn_d_gain = turn_d_gain
@@ -16,7 +16,7 @@ class FlightController:
         drone: Drone,
         target_x: float, 
         target_y: float,
-        max_tilt_deg: float = 45.0
+        max_tilt_deg: float = 60.0
     ) -> list[float]:
         """
         Changes the direction/power vector (x, y) into direct left and right motor thrusts.

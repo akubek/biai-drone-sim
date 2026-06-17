@@ -134,60 +134,37 @@ def _remove_drone(
     _ = nets.pop(index)
     _ = ge.pop(index)
 
-def _update_and_eval_drone(
-    current_frame: int,
-    dt: float,
-    drone: Drone,
-    target_m: tuple[float, float],
-    stats: EvolutionStats,
-    genome: neat.DefaultGenome,
-    net: FeedForwardNetwork,
-    expert: HardcodedBrain,
-    help_weight: float,
-    obstacles: list[pygame.Rect],
-    difficulty_multiplier: float,
-    use_cascade: bool,
-) -> bool:
-    current_time = current_frame * dt
+
+def apply_fitness_rules(
+        drone: Drone, 
+        stats: EvolutionStats, 
+        genome: Any, 
+        target_m: tuple[float, float], 
+        dt: float, 
+        obstacles: list, 
+        difficulty_multiplier: float = 1.0,
+        SCREEN_WIDTH: int = SCREEN_WIDTH,
+        SCREEN_HEIGHT: int = SCREEN_HEIGHT,
+        PPM: float = PPM
+
+        ) -> tuple[bool, bool]:
+    """Nalicza punkty i zwraca czy dron osiagnał sukces, czy się rozbił/utknał"""
     to_remove = False
-
+    success = False
+    dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
     genome_any = cast(Any, genome)
-
-    # get inpputs from drone sensors and internal states
-    state_inputs = drone.get_inputs(
-        target_pos_m=target_m,
-        screen_width_px=SCREEN_WIDTH,
-        screen_height_px=SCREEN_HEIGHT,
-        obstacles=obstacles,
-        PPM=PPM,
-        use_cascade=use_cascade,
-    )
-
-    net_action = net.activate(state_inputs)
-
-    if use_cascade:
-        l_thrust, r_thrust = global_flight_controller.get_motor_thrusts(
-            drone=drone,
-            target_x=net_action[0],
-            target_y=net_action[1]
-        )
-        drone.set_engine_thrust(l_thrust, r_thrust)
-    else:
-        drone.set_engine_thrust(net_action[0], net_action[1])
-
-    drone.update(dt)
 
     dist_m: float = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
-        return True
+        return success, True
 
     # siponout check
     if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
         stats.spinout_time += dt
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
-            return True
+            return success, True
     else:
         stats.spinout_time = 0
 
@@ -250,6 +227,7 @@ def _update_and_eval_drone(
         # 3. PEŁNY SUKCES (Ukończenie poziomu)
         if stats.hover_time >= HOVER_REQUIRED_SEC:
             genome_any.fitness += FIT_HOVER_SUCCESS_REWARD
+            success = True
             to_remove = True
 
     else:
@@ -261,7 +239,67 @@ def _update_and_eval_drone(
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:
         to_remove = True 
 
-    return to_remove
+    return success, to_remove
+
+def step_training_drone(
+    #current_frame: int,
+    dt: float,
+    drone: Drone,
+    target_m: tuple[float, float],
+    stats: EvolutionStats,
+    genome: neat.DefaultGenome,
+    net: FeedForwardNetwork,
+    expert: HardcodedBrain,
+    help_weight: float,
+    obstacles: list[pygame.Rect],
+    difficulty_multiplier: float,
+    use_cascade: bool,
+) -> tuple[bool, bool]:
+    #current_time = current_frame * dt
+    to_remove = False
+
+    # get inpputs from drone sensors and internal states
+    state_inputs = drone.get_inputs(
+        target_pos_m=target_m,
+        screen_width_px=SCREEN_WIDTH,
+        screen_height_px=SCREEN_HEIGHT,
+        obstacles=obstacles,
+        PPM=PPM,
+        use_cascade=use_cascade,
+    )
+
+    net_action = net.activate(state_inputs)
+
+    #TODO - wybór eksperta dla trybu cascade lub raw (albo przeliczenie wyjścia eksperta na odpowiedni format)
+    #ew porównywać po przeliczeniu thrustów drona z wektora
+    # ==========================================
+    # 3. IMITATION LEARNING (Porównanie z Ekspertem)
+    # ==========================================
+
+    if use_cascade:
+        l_thrust, r_thrust = global_flight_controller.get_motor_thrusts(
+            drone=drone,
+            target_x=net_action[0],
+            target_y=net_action[1]
+        )
+        drone.set_engine_thrust(l_thrust, r_thrust)
+    else:
+        drone.set_engine_thrust(net_action[0], net_action[1])
+
+    drone.update(dt)  
+
+    return apply_fitness_rules(
+        drone=drone,
+        stats=stats,
+        genome=genome,
+        target_m=target_m,
+        dt=dt,
+        obstacles=obstacles,
+        difficulty_multiplier=difficulty_multiplier,
+        SCREEN_WIDTH=SCREEN_WIDTH,
+        SCREEN_HEIGHT=SCREEN_HEIGHT,
+        PPM=PPM
+    )
 
 
 def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> float:
@@ -288,8 +326,8 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
     while current_frame < max_frames:
         current_frame += 1
         
-        should_remove = _update_and_eval_drone(
-            current_frame=current_frame,
+        success, should_remove = step_training_drone(
+            #current_frame=current_frame,
             dt=dt,
             drone=drone,
             target_m=target_m,
@@ -398,8 +436,8 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             # 3. CZYSTA LOGIKA (Dla każdego drona)
             to_remove = []
             for i, drone in enumerate(drones):
-                should_remove = _update_and_eval_drone(
-                    current_frame=current_frame,
+                success, should_remove = step_training_drone(
+                    #current_frame=current_frame,
                     dt=dt,
                     drone=drone,
                     target_m=target_m,

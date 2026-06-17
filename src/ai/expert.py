@@ -10,24 +10,17 @@ class HardcodedBrain:
     """Vector algorithm navigation expert."""
 
     def __init__(self):
-        # Create an instance of the FlightController to handle low-level motor mixing
-        self.controller = FlightController()
+        pass
 
     def get_target_commands(self, drone: Drone, target_m: tuple[float, float]) -> tuple[float, float]:
         """Returns [desired_angle_in_radians, desired_thrust_in_percent]."""
         dx = target_m[0] - drone._x
         dy = target_m[1] - drone._y
 
-        # =========================================================
-        # 1. PHYSICS: CALCULATE IDEAL HOVER
-        # =========================================================
-        gravity_force = drone.mass * drone.gravity
-        max_total_thrust = 2 * drone.max_thrust
-        base_hover = gravity_force / max_total_thrust
         dist_to_target = math.hypot(dx, dy)
 
         # =========================================================
-        # 2. AVOIDANCE: CALCULATE REPULSIVE FORCE FROM SENSORS
+        # 1. AVOIDANCE: CALCULATE REPULSIVE FORCE FROM SENSORS
         # =========================================================
         repulsive_x = 0.0
         repulsive_y = 0.0
@@ -35,7 +28,7 @@ class HardcodedBrain:
         drone_radius = drone.width_m / 2.0
         base_safe_dist = drone_radius * 1.5
         hard_limit = drone_radius * 1.1
-        max_emergency_tilt = 0.6
+        #max_emergency_tilt = 0.6
         max_lateral_force = (2 * drone.max_thrust) * 0.2
         max_lateral_accel = max_lateral_force / drone.mass
 
@@ -82,35 +75,24 @@ class HardcodedBrain:
                 repulsive_y += dir_y * strength
 
         # =========================================================
-        # 3. POSITION PD CONTROLLER + REPULSION
+        # 2. POSITION PD CONTROLLER (desired joystick vector)
         # =========================================================
         p_gain = 0.16
         d_gain = 0.08
 
-        base_pull_x = (dx * p_gain) - (drone._vel_x * d_gain)
-        base_pull_x = max(-0.15, min(0.15, base_pull_x))
+        # --- OŚ X (Pochylenie / Ruch na boki) ---
+        target_x = (dx * p_gain) - (drone._vel_x * d_gain) + repulsive_x
+        target_x = max(-1.0, min(1.0, target_x))
 
-        lateral_push = base_pull_x + repulsive_x
-        lateral_push = max(-max_emergency_tilt, min(max_emergency_tilt, lateral_push))
+        # --- OŚ Y (Wznoszenie / Opadanie) ---
+        # dy jest dodatnie gdy cel jest pod nami (chcemy opadać -> target_y > 0)
+        # dy jest ujemne gdy cel jest nad nami (chcemy się wznosić -> target_y < 0)
+        # Odejmujemy repulsive_y, bo repulsive_y to wektor odpychający
+        target_y = (dy * p_gain) - (drone._vel_y * d_gain) - repulsive_y
+        target_y = max(-1.0, min(1.0, target_y))
 
-        base_pull_y = base_hover - (dy * p_gain) + (drone._vel_y * d_gain)
-        base_pull_y = max(base_hover * 0.5, min(1.0, base_pull_y))
+        return target_x, target_y
 
-        upward_push = base_pull_y + repulsive_y
-        upward_push = max(base_hover * 0.2, min(1.0, upward_push))
-
-        # =========================================================
-        # 4. KINEMATICS: DESIRED VeCTOR TO TARGET
-        # =========================================================
-        return lateral_push, -upward_push
-
-    def activate(self, drone: Drone, target_m: tuple[float, float]) -> list[float]:
+    def activate(self, drone: Drone, target_m: tuple[float, float]) -> tuple[float, float]:
         """Maintain old interface for compatibility."""
-        target_x, target_y = self.get_target_commands(drone, target_m)
-        
-        # Delegate to the extracted controller to get the actual motor thrusts needed to achieve the desired angle and thrust.
-        return self.controller.get_motor_thrusts(
-            drone=drone,
-            target_x=target_x,
-            target_y=target_y
-        )
+        return self.get_target_commands(drone, target_m)
