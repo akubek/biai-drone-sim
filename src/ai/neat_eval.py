@@ -17,9 +17,10 @@ from pygame.math import clamp
 from src.core.flight_controller import FlightController
 from src.core.drone import Drone
 from src.ai.expert import HardcodedBrain
+from src.core.map_generator import generate_grid_obstacles
 from src.pathfinding import get_expert_path
 from src.core.stats import EvolutionStats
-from src.core.environment import generate_obstacles, generate_start_and_target
+from src.core.environment import generate_start_and_target
 from src.utils.renderer import render_simulation
 
 from src.config.config import *
@@ -314,7 +315,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
     target_m = (target_px[0] / PPM, target_px[1] / PPM)
     
     # Przeszkody na 0 do momentu wdrożenia curriculum
-    obstacles = generate_obstacles(start_px, target_px, num_obstacles=0) 
+    obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, 0, SAFE_ZONE_CELLS, PPM)
 
     net, drone, stats = _prepare_drone_and_stats(genome, config, start_px, target_px, PPM)
 
@@ -393,7 +394,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
         )
         target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
-        obstacles = generate_obstacles(start_px, target_px, num_obs)
+        obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, 0, SAFE_ZONE_CELLS, PPM)
 
         for _, genome in genomes:
             net, new_drone, new_stats = _prepare_drone_and_stats(

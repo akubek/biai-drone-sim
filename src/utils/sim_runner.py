@@ -10,7 +10,8 @@ from src.core.drone import Drone
 from src.core.flight_controller import FlightController
 from src.ai.expert import HardcodedBrain
 from src.core.stats import EvolutionStats
-from src.core.environment import generate_obstacles, generate_start_and_target
+from src.core.environment import generate_start_and_target
+from src.core.map_generator import generate_grid_obstacles
 from src.utils.renderer import render_simulation
 from src.ai.neat_eval import apply_fitness_rules
 from src.config.config import *
@@ -71,7 +72,7 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
 
     target_pos = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
     drone_pos_px: tuple[int, int] = cast(tuple[int, int], (int(drone._x * PPM), int(drone._y * PPM)))
-    obstacles = generate_obstacles(drone_pos_px, target_pos, num_obstacles=2)
+    obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, drone_pos_px, target_pos, GRID_SIZE_M, 5, SAFE_ZONE_CELLS, PPM)
 
     run = True
     while run:
@@ -80,7 +81,7 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
                 run = False
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
                 drone_pos_px = cast(tuple[int, int], (int(drone._x * PPM), int(drone._y * PPM)))
-                obstacles = generate_obstacles(drone_pos_px, target_pos, num_obstacles=2)
+                obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, drone_pos_px, target_pos, GRID_SIZE_M, 5, SAFE_ZONE_CELLS, PPM)
 
         # Myszka staje się nowym celem!
         mx, my = pygame.mouse.get_pos()
@@ -127,6 +128,9 @@ def test_baseline() -> None:
     flight_controller = FlightController()
 
     target_px = (SCREEN_WIDTH // 2, SCREEN_HEIGHT // 4)
+    start_x = (SCREEN_WIDTH // 2)
+    start_y = (SCREEN_HEIGHT // 2)
+    start_pos_px = (start_x, start_y)
     target_m = (target_px[0] / PPM, target_px[1] / PPM)
     obstacles = []
 
@@ -146,7 +150,7 @@ def test_baseline() -> None:
                 run = False
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
                 drone_pos_px = (int(drone._x * PPM), int(drone._y * PPM))
-                obstacles = generate_obstacles(drone_pos_px, target_px, num_obstacles=5)
+                obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_pos_px, target_px, GRID_SIZE_M, 20, SAFE_ZONE_CELLS, PPM)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 target_px = pygame.mouse.get_pos()
                 target_m = (target_px[0] / PPM, target_px[1] / PPM)
