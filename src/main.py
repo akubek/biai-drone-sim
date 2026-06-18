@@ -1,3 +1,4 @@
+import json
 import os
 import argparse
 import sys
@@ -16,24 +17,24 @@ def parse_and_run() -> None:
         type=str,
         choices=["train-fast", "train-visual", "showcase", "manual", "baseline"],
         default="train-visual",
-        help="Główny tryb działania programu."
+        help="Program mode."
     )
 
     # ==========================================
-    # 2. MODYFIKATORY (Argumenty pomocnicze)
+    # 2. MODIFIERS (Auxiliary arguments)
     # ==========================================
     parser.add_argument(
         "--model",
         type=str,
         default="models/best_drone_cascade.pkl",
-        help="Ścieżka do pliku modelu. Używane w trybie 'showcase'."
+        help="Path to the model file. Used in 'showcase' mode."
     )
 
     parser.add_argument(
         "--resume",
         type=str,
         default=None,
-        help="Ścieżka do pliku checkpointu (np. 'checkpoints/neat-checkpoint-50'). Używane w trybach 'train-*'."
+        help="Path to the checkpoint file (e.g., 'checkpoints/neat-checkpoint-50'). Used in 'train-*' modes."
     )
 
     parser.add_argument(
@@ -41,12 +42,24 @@ def parse_and_run() -> None:
         type=str,
         choices=["cascade", "e2e"],
         default="cascade",
-        help="Architektura sterowania: 'cascade' (z FlightControllerem) lub 'e2e' (surowe silniki)."
+        help="Control architecture: 'cascade' (with FlightController) or 'e2e' (raw motors)."
     )
 
     args = parser.parse_args()
 
-    # --- Ustalanie ścieżki do konfigu (zgodnie z nową strukturą) ---
+    # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
+    config_json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "training_config.json"))
+    try:
+        with open(config_json_path, 'r', encoding='utf-8') as f:
+            exp_config = json.load(f)
+    except FileNotFoundError:
+        print(f"ERROR: Experiment configuration file not found: {config_json_path}")
+        sys.exit(1)
+
+    training_mode = exp_config.get("training_mode", 0)
+    target_obstacles = exp_config.get("target_obstacles", 3)
+
+    # --- Determine the path to the config file (according to the new structure) ---
     local_dir = os.path.dirname(__file__)
     if args.arch == "cascade":
         config_path = os.path.abspath(os.path.join(local_dir, "../conf/neat-cascade.txt"))
@@ -56,39 +69,49 @@ def parse_and_run() -> None:
         is_cascade = False
 
     if not os.path.exists(config_path):
-        print(f"❌ BŁĄD: Nie znaleziono pliku konfiguracyjnego NEAT: {config_path}")
+        print(f"ERROR: NEAT config file not found: {config_path}")
         sys.exit(1)
 
     # ==========================================
-    # 3. ROUTING LOGIKI
+    # 3. ROUTING LOGIC
     # ==========================================
     if args.mode == "train-fast":
-        print("🚀 TRYB: TRAIN-FAST (Headless, Wieloprocesowy)")
+        print("MODE: TRAIN-FAST (Headless, Multi-process)")
         if args.resume:
-            print(f"Wznawianie z checkpointu: {args.resume}")
-        # Tutaj wywołasz nową funkcję, która odpali ParallelEvaluatora bez Pygame
-        neat_eval.run_neat_headless(config_path, checkpoint=args.resume, use_cascade=is_cascade)
+            print(f"Resuming from checkpoint: {args.resume}")
+        # Here you will call the new function that runs the ParallelEvaluator without Pygame
+        neat_eval.run_neat_headless(
+            config_path,
+            checkpoint=args.resume,
+            use_cascade=is_cascade,
+            exp_config=exp_config
+        )
 
     elif args.mode == "train-visual":
-        print("👁️ TRYB: TRAIN-VISUAL (Z podglądem na żywo)")
+        print("MODE: TRAIN-VISUAL (With live preview)")
         if args.resume:
-            print(f"Wznawianie z checkpointu: {args.resume}")
-        # To Twój dotychczasowy run_neat, przerobiony na oddzielne renderowanie
-        neat_eval.run_neat_visual(config_path, checkpoint=args.resume, use_cascade=is_cascade)
+            print(f"Resuming from checkpoint: {args.resume}")
+        # This is your previous run_neat, modified for separate rendering
+        neat_eval.run_neat_visual(
+            config_path,
+            checkpoint=args.resume,
+            use_cascade=is_cascade,
+            exp_config=exp_config
+        )
 
     elif args.mode == "showcase":
-        print(f"🎬 TRYB: SHOWCASE (Odtwarzanie: {args.model})")
+        print(f"MODE: SHOWCASE (Playback: {args.model})")
         if not os.path.exists(args.model):
-            print(f"❌ BŁĄD: Nie znaleziono pliku modelu '{args.model}'!")
+            print(f"ERROR: Model file not found: '{args.model}'")
             sys.exit(1)
         sim_runner.test_best_drone(config_path, genome_path=args.model)
 
     elif args.mode == "manual":
-        print("🎮 TRYB: MANUAL (Test fizyki i sterownika z klawiatury)")
+        print("MODE: MANUAL (Test physics and controller with keyboard)")
         test_physics.test_manual_flight()
 
     elif args.mode == "baseline":
-        print("🤖 TRYB: BASELINE (Test wbudowanego Eksperta)")
+        print("MODE: BASELINE (Test built-in Expert)")
         sim_runner.test_baseline()
 
 def main() -> None:

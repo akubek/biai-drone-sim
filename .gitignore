@@ -19,8 +19,6 @@ pyrightconfig.json
 .pydevproject
 
 # --- BIAI / NEAT specific ---
-# NEAT generuje "checkpointy" (zapisy stanu ewolucji), 
-# nie chcemy ich wszystkich na GitHubie.
 neat-checkpoint-*
 *.pkl
 
@@ -28,3 +26,8 @@ neat-checkpoint-*
 *.log
 .DS_Store
 Thumbs.db
+
+# --- DRONE SIMULATION LOGS ---
+logs/
+*.csv
+*.png

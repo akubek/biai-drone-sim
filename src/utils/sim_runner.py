@@ -58,6 +58,8 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
     with open(genome_path, "rb") as f:
         winner_genome = pickle.load(f)
 
+    print("=== STRUKTURA NAJLEPSZEJ SIECI ===")
+    print(winner_genome)
     # Dedukcja trybu architektury z konfiguracji
     is_cascade = (config.genome_config.num_inputs == 16)
     flight_controller = FlightController() if is_cascade else None
@@ -109,6 +111,7 @@ def test_best_drone(config_path: str, genome_path: str = "best_drone.pkl") -> No
             continue
 
         render_simulation(screen, [drone], target_px, obstacles, PPM)
+        pygame.display.flip()
         clock.tick(FPS)
 
     pygame.quit()

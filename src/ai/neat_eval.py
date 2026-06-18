@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 import neat
 from neat.nn import FeedForwardNetwork
 from numpy import append, true_divide
@@ -14,6 +16,7 @@ from typing import cast, Any
 
 from pygame.math import clamp
 
+from src.ai.state import TrainingState
 from src.core.flight_controller import FlightController
 from src.core.drone import Drone
 from src.ai.expert import HardcodedBrain
@@ -21,7 +24,9 @@ from src.core.map_generator import generate_grid_obstacles
 from src.pathfinding import get_expert_path
 from src.core.stats import EvolutionStats
 from src.core.environment import generate_start_and_target
+from src.utils.logger import CSVTrainingReporter
 from src.utils.renderer import render_neat_hud, render_simulation
+from src.ai.evaluator import CurriculumParallelEvaluator
 
 from src.config.config import *
 from src.config.evolution import *
@@ -32,7 +37,6 @@ pygame.font.init()
 font = pygame.font.SysFont("arial", 10)
 
 show_simulation = True
-generation_count = 0
 
 # ZMIENNE DO MIĘKKIEGO PRZEŁĄCZANIA (w trybie wizualnym)
 render_graphics = True
@@ -42,6 +46,8 @@ uncapped = False
 
 USE_FLIGHT_CONTROLLER = False
 global_flight_controller = FlightController()
+
+global_state: TrainingState
 
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I EWALUACJA)
@@ -160,13 +166,13 @@ def apply_fitness_rules(
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
-        return success, True
+        return False, True #(success, to_remove)
 
     # siponout check
     if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
         stats.spinout_time += dt
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
-            return success, True
+            return False, True #(success, to_remove)
     else:
         stats.spinout_time = 0
 
@@ -201,8 +207,10 @@ def apply_fitness_rules(
         # 3. Dodatkowa kara za wlot w ścianę bez hamowania (np. 15.0)
         if crash_speed > SAFE_CRASH_SPEED_M_S:
             genome_any.fitness -= FIT_KAMIKAZE_PENALTY
-            
-        to_remove = True
+
+        if genome_any.fitness <= 0.1:
+            genome_any.fitness = 0.1
+        return False, True  # (success, to_remove)
 
     if dist_m < (TARGET_SIZE_PX / PPM):
         stats.time_without_progress = 0  # reset stagnation time
@@ -275,21 +283,28 @@ def step_training_drone(
 
     net_action = net.activate(state_inputs)
 
-    #TODO - wybór eksperta dla trybu cascade lub raw (albo przeliczenie wyjścia eksperta na odpowiedni format)
-    #ew porównywać po przeliczeniu thrustów drona z wektora
-    # ==========================================
-    # 3. IMITATION LEARNING (Porównanie z Ekspertem)
-    # ==========================================
-
     if use_cascade:
-        l_thrust, r_thrust = global_flight_controller.get_motor_thrusts(
+        net_left_thrust, net_right_thrust = global_flight_controller.get_motor_thrusts(
             drone=drone,
             target_x=net_action[0],
             target_y=net_action[1]
         )
-        drone.set_engine_thrust(l_thrust, r_thrust)
     else:
-        drone.set_engine_thrust(net_action[0], net_action[1])
+        net_left_thrust, net_right_thrust = net_action[0], net_action[1]
+
+
+    #get expert thrusts
+    expert_left_thrust = 0.0
+    expert_right_thrust = 0.0
+
+    if help_weight > 0.0 and expert is not None:
+        expert_action = expert.get_target_commands(drone, target_m)
+        expert_left_thrust, expert_right_thrust = global_flight_controller.get_motor_thrusts(drone=drone, target_x=expert_action[0], target_y=expert_action[1])
+
+    final_left_thrust = (net_left_thrust * (1.0 - help_weight)) + (expert_left_thrust * help_weight)
+    final_right_thrust = (net_right_thrust * (1.0 - help_weight)) + (expert_right_thrust * help_weight)
+
+    drone.set_engine_thrust(final_left_thrust, final_right_thrust)
 
     drone.update(dt)  
 
@@ -312,14 +327,15 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
     is_cascade = (config.genome_config.num_inputs == 16)
     expert = HardcodedBrain()
 
-    # Losowanie mapy
-    start_px, target_px = generate_start_and_target(
-        SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
-    )
+    help_weight = getattr(config, 'current_help_weight', 0.0)
+
+    start_px = getattr(config, 'shared_start_px', (0, 0))
+    target_px = getattr(config, 'shared_target_px', (0, 0))
     target_m = (target_px[0] / PPM, target_px[1] / PPM)
-    
-    # Przeszkody na 0 do momentu wdrożenia curriculum
-    obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, 0, SAFE_ZONE_CELLS, PPM)
+    shared_obstacles_data = getattr(config, 'shared_obstacles_data', [])
+    obstacles = [
+        pygame.Rect(x, y, w, h) for x, y, w, h in shared_obstacles_data
+    ]
 
     net, drone, stats = _prepare_drone_and_stats(genome, config, start_px, target_px, PPM)
 
@@ -340,7 +356,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
             genome=genome,
             net=net,
             expert=expert,
-            help_weight=0.0,
+            help_weight=help_weight,
             obstacles=obstacles,
             difficulty_multiplier=1.0,
             use_cascade=is_cascade,
@@ -348,25 +364,26 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
         if should_remove:
             break
 
+        # save the success state in the genome for later analysis
+        if success:
+            cast(Any, genome).is_success = True
+
     return cast(Any, genome).fitness
 
 
 def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config) -> None:
-    global generation_count
     global render_graphics
     global target_fps
     global uncapped
     global font
+
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
 
     expert = HardcodedBrain()
-
     is_cascade = (config.genome_config.num_inputs == 16)
 
-    # do poprawy -> nie liczba rund, tylko jeżeli osiągnie dany fitness to obniża pomoc eksperta
-    max_help_gens = 50
-    help_weight = max(0, 1.0 - (generation_count / max_help_gens))
+    global_state.update_parameters()
 
     #do przemyślenia zachowanie eksperta, oceny fitnessu po przejściu do trudniejszych scenariuszy
 
@@ -399,7 +416,12 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
         )
         target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
-        obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, 0, SAFE_ZONE_CELLS, PPM)
+        obstacles = generate_grid_obstacles(
+            SCREEN_WIDTH, SCREEN_HEIGHT,
+            start_px, target_px,
+            GRID_SIZE_M, global_state.num_obstacles,
+            SAFE_ZONE_CELLS, PPM
+        )
 
         for _, genome in genomes:
             net, new_drone, new_stats = _prepare_drone_and_stats(
@@ -453,7 +475,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     genome=ge[i],
                     net=nets[i],
                     expert=expert,
-                    help_weight=help_weight,
+                    help_weight=global_state.current_help_weight,
                     obstacles=obstacles,
                     difficulty_multiplier=1.0,
                     use_cascade=is_cascade,
@@ -461,6 +483,11 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     SCREEN_HEIGHT=SCREEN_HEIGHT,
                     PPM=PPM
                 )
+
+                # save the success state in the genome for later analysis
+                if success:
+                    cast(Any, ge[i]).is_success = True
+
                 if should_remove:
                     to_remove.append(i)
 
@@ -475,7 +502,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                 render_neat_hud(
                     screen=screen,
                     font=font,
-                    generation=generation_count,
+                    generation=global_state.generation,
                     alive_count=len(drones),
                     pop_size=total_population,
                     best_fitness=max_best_fitness,
@@ -497,17 +524,25 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
     num_rounds = len(scenarios)
     for genome_id, genome in genomes:
         cast(Any, genome).fitness /= num_rounds
-    generation_count += 1
+
+    global_state.generation += 1
 
 
 # =====================================================================
 # TRYB VISUAL (Z Okienkiem Pygame)
 # =====================================================================
 
-def run_neat_visual(config_path: str, checkpoint: str | None = None, use_cascade: bool = True) -> None:
+def run_neat_visual(        
+    config_path: str,
+    checkpoint: str | None = None,
+    use_cascade: bool = True,
+    exp_config: dict | None = None
+) -> None:
     """Uruchamia ewolucję w 1 wątku z możliwością renderowania (Pygame)."""
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
+    global global_state
+    global_state = TrainingState(exp_config=exp_config)
     # 1. Setup okna Pygame
     pygame.init()
     pygame.font.init()
@@ -516,6 +551,12 @@ def run_neat_visual(config_path: str, checkpoint: str | None = None, use_cascade
 
     # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
     population, _ = _setup_population(config_path, checkpoint)
+
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().isoformat() + ".csv" 
+
+    reporter = CSVTrainingReporter(global_state,filename=logfile)
+    population.add_reporter(reporter)
+
 
     print("Rozpoczynanie ewolucji w trybie WIZUALNYM...")
     
@@ -535,22 +576,35 @@ def run_neat_visual(config_path: str, checkpoint: str | None = None, use_cascade
 # TRYB HEADLESS (Wieloprocesowy, Bez okienka)
 # =====================================================================
 
-def run_neat_headless(config_path: str, checkpoint: str | None = None, use_cascade: bool = True) -> None:
+def run_neat_headless(
+    config_path: str,
+    checkpoint: str | None = None,
+    use_cascade: bool = True,
+    exp_config: dict | None = None
+) -> None:
     """Uruchamia ewolucję na wszystkich rdzeniach procesora bez GUI."""
     # UWAGA: Zero importów i initów Pygame tutaj!
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
+    global global_state
+    global_state = TrainingState(exp_config=exp_config)
     
     population, _ = _setup_population(config_path, checkpoint)
+
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().isoformat() + ".csv" 
+
+    reporter = CSVTrainingReporter(global_state,filename=logfile)
+    population.add_reporter(reporter)
 
     # Użycie wszystkich dostępnych rdzeni procesora, 1 wolny
     num_cores = max(1, multiprocessing.cpu_count() - 1)
     print(f"Rozpoczynanie ewolucji w trybie HEADLESS (Używam {num_cores} rdzeni)...")
     
+    parallel_evaluator = CurriculumParallelEvaluator(num_cores, _eval_genome_headless, global_state)
+
     # Tworzymy Parallel Evaluator podając mu naszą zrefaktoryzowaną funkcję dla 1 drona
-    pe = neat.ParallelEvaluator(num_cores, _eval_genome_headless)
     
-    winner = population.run(pe.evaluate, EVOLUTION_CYCLES)
+    winner = population.run(parallel_evaluator.evaluate, EVOLUTION_CYCLES)
 
     print(f"\nBest genome found:\n{winner}")
     model_path = "models/best_drone_cascade.pkl" if USE_FLIGHT_CONTROLLER else "models/best_drone_e2e.pkl"
