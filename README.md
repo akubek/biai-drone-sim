@@ -66,8 +66,8 @@ The project is structured into three main phases. We have completed the baseline
 
 3. Run the main launcher script:
 
-  ```bash
-  python launcher.py
-  ```
+    ```bash
+    python launcher.py
+    ```
 
 4. Configuration files for the NEAT algorithm (`neat-cascade.txt` and `neat-e2e.txt`) can be found and modified in the `conf/` directory. Physics and reward parameters are defined within the `src/config/` module.
