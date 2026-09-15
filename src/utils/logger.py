@@ -25,7 +25,7 @@ class CSVTrainingReporter(BaseReporter):
 
         # Tworzenie pliku z nagłówkami, jeśli nie istnieje
         if not os.path.exists(self.filename):
-            with open(self.filename, mode='w', newline='') as file:
+            with open(self.filename, mode='w', newline='', encoding="utf-8") as file:
                 writer = csv.writer(file)
                 writer.writerow(self.headers)
 
@@ -46,7 +46,7 @@ class CSVTrainingReporter(BaseReporter):
         species_count = len(species.species) if species else 0
 
         # Zapis do CSV
-        with open(self.filename, mode='a', newline='') as file:
+        with open(self.filename, mode='a', newline='', encoding="utf-8") as file:
             writer = csv.writer(file)
             writer.writerow([
                 self.state.generation,

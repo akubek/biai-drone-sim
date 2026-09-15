@@ -54,7 +54,9 @@ def main():
         command = [python_exe, "-m", "src.main"] + args_to_pass
 
         # Uruchamiamy proces
-        _ = subprocess.run(command, check=True)
+        env = os.environ.copy()
+        env["PYTHONUTF8"] = "1"
+        _ = subprocess.run(command, check=True, env=env)
 
     except subprocess.CalledProcessError:
         print("\nSimulation closed with an error or interrupted.")
