@@ -539,6 +539,8 @@ def run_neat_visual(
     exp_config: dict | None = None
 ) -> None:
     """Uruchamia ewolucję w 1 wątku z możliwością renderowania (Pygame)."""
+    Path("models").mkdir(exist_ok=True)
+    Path("logs").mkdir(exist_ok=True)
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
@@ -552,7 +554,7 @@ def run_neat_visual(
     # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
     population, _ = _setup_population(config_path, checkpoint)
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().isoformat() + ".csv" 
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv" 
 
     reporter = CSVTrainingReporter(global_state,filename=logfile)
     population.add_reporter(reporter)
@@ -583,7 +585,8 @@ def run_neat_headless(
     exp_config: dict | None = None
 ) -> None:
     """Uruchamia ewolucję na wszystkich rdzeniach procesora bez GUI."""
-    # UWAGA: Zero importów i initów Pygame tutaj!
+    Path("models").mkdir(exist_ok=True)
+    Path("logs").mkdir(exist_ok=True)
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
@@ -591,7 +594,7 @@ def run_neat_headless(
     
     population, _ = _setup_population(config_path, checkpoint)
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().isoformat() + ".csv" 
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv" 
 
     reporter = CSVTrainingReporter(global_state,filename=logfile)
     population.add_reporter(reporter)
