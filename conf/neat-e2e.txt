@@ -6,18 +6,18 @@ reset_on_extinction   = True
 no_fitness_termination = True
 
 [DefaultGenome]
-# Wielkość sieci
+# Wielkosc sieci
 num_inputs              = 18
 num_hidden              = 8
 num_outputs             = 2
 
-# Opcje aktywacji węzłów
+# Opcje aktywacji wezlow
 activation_default      = sigmoid 
 activation_mutate_rate  = 0.0
 activation_options      = sigmoid 
 activation_replace_rate = 0.0
 
-# --- WAGI POŁĄCZEŃ ---
+# --- WAGI POLACZEN ---
 weight_max_value        = 5.0
 weight_min_value        = -5.0
 weight_init_mean        = 0.0
@@ -35,12 +35,12 @@ bias_mutate_rate        = 0.7
 bias_replace_rate       = 0.1
 bias_mutate_power       = 0.2
 
-# Opcje agregacji węzłów
+# Opcje agregacji wezlow
 aggregation_default     = sum
 aggregation_mutate_rate = 0.0
 aggregation_options     = sum
 
-# Opcje response węzłów
+# Opcje response wezlow
 response_init_mean      = 1.0
 response_init_stdev     = 0.0
 response_max_value      = 5.0
@@ -49,20 +49,20 @@ response_mutate_rate    = 0.0
 response_mutate_power   = 0.0
 response_replace_rate   = 0.0
 
-# Opcje mutacji strukturalnych (dodawanie/usuwanie neuronów i połączeń)
+# Opcje mutacji strukturalnych (dodawanie/usuwanie neuronow i polaczen)
 conn_add_prob           = 0.1
 conn_delete_prob        = 0.1
 node_add_prob           = 0.1
 node_delete_prob        = 0.1
 
-# Geny połączeń (czy mutacja może odciąć jakiś sensor)
+# Geny polaczen (czy mutacja moze odciac jakis sensor)
 enabled_default         = True
 enabled_mutate_rate     = 0.1
 
 feed_forward            = False
 initial_connection      = full_nodirect
 
-# Opcje kompatybilności genomów
+# Opcje kompatybilnosci genomow
 compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.1
 
