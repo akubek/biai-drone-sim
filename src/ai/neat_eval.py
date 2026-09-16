@@ -25,6 +25,7 @@ from src.core.map_generator import generate_grid_obstacles
 from src.core.stats import EvolutionStats
 from src.utils.logger import CSVTrainingReporter
 from src.utils.renderer import render_neat_hud, render_simulation
+from src.utils.run_manager import create_run_dir
 
 pygame.font.init()
 font = pygame.font.SysFont("arial", 10)
@@ -45,15 +46,15 @@ global_state: TrainingState
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I EWALUACJA)
 # =====================================================================
-def _setup_population(config_path: str, checkpoint: str | None, pop_size: int | None) -> tuple[neat.Population, neat.Config]:
+def _setup_population(config_path: str, checkpoint: str | None, pop_size: int | None, run_dir: str | None) -> tuple[neat.Population, neat.Config]:
     """Wspólna funkcja wczytująca konfigurację, checkpointy i reporterów."""
     config = neat.Config(
         neat.DefaultGenome, neat.DefaultReproduction,
         neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path
     )
 
-    checkpoint_dir = Path("checkpoints")
-    checkpoint_dir.mkdir(exist_ok=True)
+    checkpoint_dir = Path(run_dir) / "checkpoints" if run_dir else Path("checkpoints")
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     if pop_size is not None:
         config.pop_size = pop_size
@@ -523,7 +524,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
 
 # =====================================================================
-# TRYB VISUAL (Z Okienkiem Pygame)
+# VISUAL MODE (With Pygame Window)
 # =====================================================================
 
 def run_neat_visual(        
@@ -532,14 +533,12 @@ def run_neat_visual(
     use_cascade: bool = True,
     exp_config: dict | None = None
 ) -> None:
-    """Uruchamia ewolucję w 1 wątku z możliwością renderowania (Pygame)."""
-    Path("models").mkdir(exist_ok=True)
-    Path("logs").mkdir(exist_ok=True)
+    """Runs the NEAT evolution in visual mode with a Pygame window."""
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
     global_state = TrainingState(exp_config=exp_config)
-    # 1. Setup okna Pygame
+    # 1. Setup the Pygame window
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -547,32 +546,32 @@ def run_neat_visual(
 
     exp_config = exp_config or {}
     generations = exp_config.get("generations", EVOLUTION_CYCLES)
+    # Create a directory for the results of this run
+    run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
+    print(f"RUN DIR: {run_dir}")
 
     # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
-    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"))
+    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + ".csv" 
-
-    reporter = CSVTrainingReporter(global_state,filename=logfile)
+    reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)
 
 
-    print("Rozpoczynanie ewolucji w trybie WIZUALNYM...")
+    print("Starting evolution in VISUAL mode...")
     
     # Uruchamiamy eval_genomes_visual (Twój zrefaktoryzowany kod z poprzednich kroków)
     winner = population.run(_eval_genomes_visual, generations)
 
     print(f"\nBest genome found:\n{winner}")
-    model_path = "models/best_drone_cascade.pkl" if USE_FLIGHT_CONTROLLER else "models/best_drone_e2e.pkl"
-    with open(model_path, "wb") as f:
+    with open(run_dir / "best_drone.pkl", "wb") as f:
         pickle.dump(winner, f)
-        print(f"Zapisano najlepszego drona do '{model_path}'")
+        print(f"Saved best drone to '{run_dir / 'best_drone.pkl'}'")
 
     pygame.quit()
 
 
 # =====================================================================
-# TRYB HEADLESS (Wieloprocesowy, Bez okienka)
+# HEADLESS MODE (Multiprocessing, No GUI)
 # =====================================================================
 
 def run_neat_headless(
@@ -581,9 +580,7 @@ def run_neat_headless(
     use_cascade: bool = True,
     exp_config: dict | None = None
 ) -> None:
-    """Uruchamia ewolucję na wszystkich rdzeniach procesora bez GUI."""
-    Path("models").mkdir(exist_ok=True)
-    Path("logs").mkdir(exist_ok=True)
+    """Runs the NEAT evolution on all CPU cores without a GUI."""
     global USE_FLIGHT_CONTROLLER
     USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
@@ -591,26 +588,26 @@ def run_neat_headless(
 
     exp_config = exp_config or {}
     generations = exp_config.get("generations", EVOLUTION_CYCLES)
-    
-    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"))
+    # Create a directory for the results of this run
+    run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
+    print(f"RUN DIR: {run_dir}")
+    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + ".csv" 
-
-    reporter = CSVTrainingReporter(global_state,filename=logfile)
+    reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)
 
-    # Użycie wszystkich dostępnych rdzeni procesora, 1 wolny
+    # Use all available CPU cores, leaving 1 free
     num_cores = max(1, multiprocessing.cpu_count() - 1)
-    print(f"Rozpoczynanie ewolucji w trybie HEADLESS (Używam {num_cores} rdzeni)...")
+    print(f"Starting evolution in HEADLESS mode (Using {num_cores} cores)...")
     
     parallel_evaluator = CurriculumParallelEvaluator(num_cores, _eval_genome_headless, global_state)
 
-    # Tworzymy Parallel Evaluator podając mu naszą zrefaktoryzowaną funkcję dla 1 drona
+    # Create a Parallel Evaluator using the _eval_genome_headless function for a single drone
     
     winner = population.run(parallel_evaluator.evaluate, generations)
 
     print(f"\nBest genome found:\n{winner}")
-    model_path = "models/best_drone_cascade.pkl" if USE_FLIGHT_CONTROLLER else "models/best_drone_e2e.pkl"
+    model_path = run_dir / "best_drone.pkl"
     with open(model_path, "wb") as f:
         pickle.dump(winner, f)
-        print(f"Zapisano najlepszego drona do '{model_path}'")
+        print(f"Saved best drone to '{model_path}'")

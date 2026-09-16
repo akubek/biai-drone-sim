@@ -29,12 +29,7 @@ Thumbs.db
 
 # --- DRONE SIMULATION LOGS ---
 logs/
-results/**
-!results/**/
-!results/**/manifest.json
-!results/**/*.csv
-!results/**/*.md
+results/
 checkpoints/
 models/
-logs/*.csv
 *.png
