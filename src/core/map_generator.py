@@ -12,7 +12,7 @@ def _get_grid_coords(px_pos: tuple[int, int], grid_size: int) -> tuple[int, int]
 def _is_solvable(grid: list[list[bool]], start_idx: tuple[int, int], target_idx: tuple[int, int], cols: int, rows: int) -> bool:
     """Sprawdza za pomocą algorytmu BFS, czy istnieje ścieżka od startu do celu."""
     queue = deque([start_idx])
-    visited = set([start_idx])
+    visited = {start_idx}
 
     # Możliwe ruchy: góra, dół, lewo, prawo
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
