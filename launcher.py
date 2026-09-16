@@ -55,7 +55,8 @@ def main():
 
         # Uruchamiamy proces
         env = os.environ.copy()
-        env["PYTHONUTF8"] = "1"
+        env["PYTHONUTF8"] = "1"         # Ensure UTF-8 encoding for Python
+        env["PYTHONHASHSEED"] = "0"     # Ensure deterministic hashing for Python
         _ = subprocess.run(command, check=True, env=env)
 
     except subprocess.CalledProcessError:

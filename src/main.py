@@ -1,10 +1,12 @@
+import argparse
 import json
 import os
-import argparse
+import random
 import sys
 
 from src.ai import neat_eval
-from src.utils import test_physics, sim_runner
+from src.utils import sim_runner, test_physics
+
 
 def parse_and_run() -> None:
     parser = argparse.ArgumentParser(description="BIAI Drone Sim - Symulator i Ewolucja NEAT")
@@ -45,6 +47,13 @@ def parse_and_run() -> None:
         help="Control architecture: 'cascade' (with FlightController) or 'e2e' (raw motors)."
     )
 
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Seed for random number generator, used for reproducibility."
+    )
+
     args = parser.parse_args()
 
     # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
@@ -56,8 +65,14 @@ def parse_and_run() -> None:
         print(f"ERROR: Experiment configuration file not found: {config_json_path}")
         sys.exit(1)
 
-    training_mode = exp_config.get("training_mode", 0)
-    target_obstacles = exp_config.get("target_obstacles", 3)
+    #set rng seed from argument or generate a random one if not provided
+    seed = args.seed if args.seed is not None else random.randrange(2**31)
+    random.seed(seed)
+    exp_config["seed"] = seed
+    print(f"SEED: {seed}")
+
+    #training_mode = exp_config.get("training_mode", 0)
+    #target_obstacles = exp_config.get("target_obstacles", 3)
 
     # --- Determine the path to the config file (according to the new structure) ---
     local_dir = os.path.dirname(__file__)
