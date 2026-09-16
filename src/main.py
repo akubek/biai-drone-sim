@@ -36,7 +36,8 @@ def parse_and_run() -> None:
         "--resume",
         type=str,
         default=None,
-        help="Path to the checkpoint file (e.g., 'checkpoints/neat-checkpoint-50'). Used in 'train-*' modes."
+        help="Path to the checkpoint file (e.g., 'checkpoints/neat-checkpoint-50') or if none latest is used. Used in 'train-*' modes. "
+             "Training resumed from a checkpoint is no longer considered reproducible."
     )
 
     parser.add_argument(
@@ -52,6 +53,20 @@ def parse_and_run() -> None:
         type=int,
         default=None,
         help="Seed for random number generator, used for reproducibility."
+    )
+
+    parser.add_argument(
+        "--generations",
+        type=int,
+        default=None,
+        help="Number of generations for training in 'train-*' modes."
+    )
+
+    parser.add_argument(
+        "--pop-size",
+        type=int,
+        default=None,
+        help="Population size for training in 'train-*' modes."
     )
 
     args = parser.parse_args()
@@ -71,9 +86,6 @@ def parse_and_run() -> None:
     exp_config["seed"] = seed
     print(f"SEED: {seed}")
 
-    #training_mode = exp_config.get("training_mode", 0)
-    #target_obstacles = exp_config.get("target_obstacles", 3)
-
     # --- Determine the path to the config file (according to the new structure) ---
     local_dir = os.path.dirname(__file__)
     if args.arch == "cascade":
@@ -86,6 +98,11 @@ def parse_and_run() -> None:
     if not os.path.exists(config_path):
         print(f"ERROR: NEAT config file not found: {config_path}")
         sys.exit(1)
+
+    if args.generations is not None:
+        exp_config["generations"] = args.generations
+    if args.pop_size is not None:
+        exp_config["pop_size"] = args.pop_size
 
     # ==========================================
     # 3. ROUTING LOGIC

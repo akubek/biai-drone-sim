@@ -1,37 +1,30 @@
-from datetime import date, datetime
+import math
+import multiprocessing
+import pickle
+import random
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, cast
 
 import neat
-from neat.nn import FeedForwardNetwork
-from numpy import append, true_divide
 import pygame
-import math
-import sys
-import random
-import pickle
-import multiprocessing
-from dataclasses import dataclass
+from neat.nn import FeedForwardNetwork
 
-from pathlib import Path
-from typing import cast, Any
-
-from pygame.math import clamp
-
-from src.ai.state import TrainingState
-from src.core.flight_controller import FlightController
-from src.core.drone import Drone
-from src.ai.expert import HardcodedBrain
-from src.core.map_generator import generate_grid_obstacles
-from src.pathfinding import get_expert_path
-from src.core.stats import EvolutionStats
-from src.core.environment import generate_start_and_target
-from src.utils.logger import CSVTrainingReporter
-from src.utils.renderer import render_neat_hud, render_simulation
 from src.ai.evaluator import CurriculumParallelEvaluator
-
+from src.ai.expert import HardcodedBrain
+from src.ai.state import TrainingState
 from src.config.config import *
 from src.config.evolution import *
 from src.config.physics import *
 from src.config.rewards import *
+from src.core.drone import Drone
+from src.core.environment import generate_start_and_target
+from src.core.flight_controller import FlightController
+from src.core.map_generator import generate_grid_obstacles
+from src.core.stats import EvolutionStats
+from src.utils.logger import CSVTrainingReporter
+from src.utils.renderer import render_neat_hud, render_simulation
 
 pygame.font.init()
 font = pygame.font.SysFont("arial", 10)
@@ -52,7 +45,7 @@ global_state: TrainingState
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I EWALUACJA)
 # =====================================================================
-def _setup_population(config_path: str, checkpoint: str | None) -> tuple[neat.Population, neat.Config]:
+def _setup_population(config_path: str, checkpoint: str | None, pop_size: int | None) -> tuple[neat.Population, neat.Config]:
     """Wspólna funkcja wczytująca konfigurację, checkpointy i reporterów."""
     config = neat.Config(
         neat.DefaultGenome, neat.DefaultReproduction,
@@ -61,6 +54,9 @@ def _setup_population(config_path: str, checkpoint: str | None) -> tuple[neat.Po
 
     checkpoint_dir = Path("checkpoints")
     checkpoint_dir.mkdir(exist_ok=True)
+
+    if pop_size is not None:
+        config.pop_size = pop_size
 
     # 1. Logika szukania najnowszego checkpointu ("latest")
     if checkpoint == "latest":
@@ -208,8 +204,7 @@ def apply_fitness_rules(
         if crash_speed > SAFE_CRASH_SPEED_M_S:
             genome_any.fitness -= FIT_KAMIKAZE_PENALTY
 
-        if genome_any.fitness <= 0.1:
-            genome_any.fitness = 0.1
+        genome_any.fitness = max(0.1, genome_any.fitness)
         return False, True  # (success, to_remove)
 
     if dist_m < (TARGET_SIZE_PX / PPM):
@@ -243,8 +238,7 @@ def apply_fitness_rules(
     else:
         stats.hover_time = 0
 
-    if genome_any.fitness <= 0.1:
-        genome_any.fitness = 0.1
+    genome_any.fitness = max(0.1, genome_any.fitness)
     
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:
         to_remove = True 
@@ -497,7 +491,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             # 4. RENDEROWANIE ODPINANE
             if render_graphics:
                 current_best_fitness = max([cast(Any, g).fitness for g in ge]) if ge else 0.0
-                max_best_fitness = current_best_fitness if current_best_fitness > max_best_fitness else max_best_fitness
+                max_best_fitness = max(max_best_fitness, current_best_fitness)
                 render_simulation(screen, drones, target_px, obstacles, PPM)
                 render_neat_hud(
                     screen=screen,
@@ -551,10 +545,13 @@ def run_neat_visual(
     pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("BIAI Drone Sim - AI Evolution (VISUAL)")
 
-    # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
-    population, _ = _setup_population(config_path, checkpoint)
+    exp_config = exp_config or {}
+    generations = exp_config.get("generations", EVOLUTION_CYCLES)
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv" 
+    # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
+    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"))
+
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + ".csv" 
 
     reporter = CSVTrainingReporter(global_state,filename=logfile)
     population.add_reporter(reporter)
@@ -563,7 +560,7 @@ def run_neat_visual(
     print("Rozpoczynanie ewolucji w trybie WIZUALNYM...")
     
     # Uruchamiamy eval_genomes_visual (Twój zrefaktoryzowany kod z poprzednich kroków)
-    winner = population.run(_eval_genomes_visual, EVOLUTION_CYCLES)
+    winner = population.run(_eval_genomes_visual, generations)
 
     print(f"\nBest genome found:\n{winner}")
     model_path = "models/best_drone_cascade.pkl" if USE_FLIGHT_CONTROLLER else "models/best_drone_e2e.pkl"
@@ -591,10 +588,13 @@ def run_neat_headless(
     USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
     global_state = TrainingState(exp_config=exp_config)
-    
-    population, _ = _setup_population(config_path, checkpoint)
 
-    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now().strftime("%Y%m%d_%H%M%S") + ".csv" 
+    exp_config = exp_config or {}
+    generations = exp_config.get("generations", EVOLUTION_CYCLES)
+    
+    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"))
+
+    logfile = "evolution_log" + ("_cascade_" if use_cascade else "_e2e_") + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + ".csv" 
 
     reporter = CSVTrainingReporter(global_state,filename=logfile)
     population.add_reporter(reporter)
@@ -607,7 +607,7 @@ def run_neat_headless(
 
     # Tworzymy Parallel Evaluator podając mu naszą zrefaktoryzowaną funkcję dla 1 drona
     
-    winner = population.run(parallel_evaluator.evaluate, EVOLUTION_CYCLES)
+    winner = population.run(parallel_evaluator.evaluate, generations)
 
     print(f"\nBest genome found:\n{winner}")
     model_path = "models/best_drone_cascade.pkl" if USE_FLIGHT_CONTROLLER else "models/best_drone_e2e.pkl"
