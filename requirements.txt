@@ -12,3 +12,4 @@ pygame==2.6.1
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
 six==1.17.0
+pytest==8.4.2
