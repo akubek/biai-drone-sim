@@ -11,4 +11,3 @@ MIN_SPAWN_DIST_M = 2.0    # Minimalna odległość w linii prostej między start
 
 # --- PARAMETRY SIATKI (GRID MAP) ---
 GRID_SIZE_M = 0.7       # Wielkość jednego kafelka (np. 1.5x - 2x średnica drona)
-SAFE_ZONE_CELLS = 0     # Ile kafelków wokół startu/celu musi być puste

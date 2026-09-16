@@ -1,10 +1,9 @@
-import pygame
+import math
 import random
 from collections import deque
 
-import math
+import pygame
 
-from src.config.config import TARGET_SIZE_PX
 
 def _get_grid_coords(px_pos: tuple[int, int], grid_size: int) -> tuple[int, int]:
     """Zwraca indeks (kolumna, wiersz) dla danej pozycji w pikselach."""
@@ -28,10 +27,9 @@ def _is_solvable(grid: list[list[bool]], start_idx: tuple[int, int], target_idx:
             nx, ny = current[0] + dx, current[1] + dy
             
             # Sprawdzamy czy nie wychodzimy poza mapę i czy nie uderzamy w ścianę
-            if 0 <= nx < cols and 0 <= ny < rows:
-                if not grid[nx][ny] and (nx, ny) not in visited:
-                    visited.add((nx, ny))
-                    queue.append((nx, ny))
+            if 0 <= nx < cols and 0 <= ny < rows and not grid[nx][ny] and (nx, ny) not in visited:
+                visited.add((nx, ny))
+                queue.append((nx, ny))
                     
     return False # Brak przejścia
 
@@ -41,8 +39,7 @@ def generate_grid_obstacles(
     start_px: tuple[int, int], 
     target_px: tuple[int, int], 
     grid_size_m: float, 
-    max_obstacles: int, 
-    safe_zone: int,
+    max_obstacles: int,
     PPM: float
 ) -> list[pygame.Rect]:
     """Konstruktywny generator mapy, gwarantujący przejezdność i stałą liczbę przeszkód."""
@@ -63,21 +60,14 @@ def generate_grid_obstacles(
     available_cells = []
     for x in range(cols):
         for y in range(rows):
-            dist_to_start = max(abs(x - start_idx[0]), abs(y - start_idx[1]))
-            dist_to_target = max(abs(x - target_idx[0]), abs(y - target_idx[1]))
-            
-            if dist_to_start > safe_zone and dist_to_target > safe_zone:
-                available_cells.append((x, y))
-
-            # 1. Obliczamy fizyczny środek kafelka w metrach
             cell_center_x_m = (x * grid_size_px + grid_size_px / 2) / PPM
             cell_center_y_m = (y * grid_size_px + grid_size_px / 2) / PPM
-            
-            # 2. Prawdziwa odległość euklidesowa (w metrach) od drona i celu
-            dist_to_start_m = math.hypot(cell_center_x_m - start_px[0] / PPM, cell_center_y_m - start_px[1] / PPM)
-            dist_to_target_m = math.hypot(cell_center_x_m - target_px[0] / PPM, cell_center_y_m - target_px[1] / PPM)
-            
-            # 3. Dodajemy komórkę tylko, jeśli jej środek jest fizycznie bezpiecznie oddalony
+
+            dist_to_start_m = math.hypot(cell_center_x_m - start_px[0] / PPM,
+                                        cell_center_y_m - start_px[1] / PPM)
+            dist_to_target_m = math.hypot(cell_center_x_m - target_px[0] / PPM,
+                                        cell_center_y_m - target_px[1] / PPM)
+
             if dist_to_start_m > safe_zone_m and dist_to_target_m > safe_zone_m:
                 available_cells.append((x, y))
 
@@ -107,5 +97,9 @@ def generate_grid_obstacles(
             if grid[x][y]:
                 rect = pygame.Rect(x * grid_size_px, y * grid_size_px, grid_size_px, grid_size_px)
                 obstacles.append(rect)
+
+    if obstacles_placed < max_obstacles:
+        print(f"WARNING: ordered {max_obstacles} obstacles, placed {obstacles_placed} "
+              f"(no space left on grid {cols}x{rows})")
 
     return obstacles

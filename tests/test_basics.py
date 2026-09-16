@@ -35,7 +35,7 @@ def test_obstacle_count_is_exact():
         for requested in (1, 3, 5, 8):
             obstacles = generate_grid_obstacles(
                 SCREEN_WIDTH, SCREEN_HEIGHT, (200, 600), (800, 150),
-                GRID_SIZE_M, requested, SAFE_ZONE_CELLS, PPM,
+                GRID_SIZE_M, requested, PPM,
             )
             assert len(obstacles) == requested, \
                 f"seed={seed}, zamowiono {requested}, dostano {len(obstacles)}"
