@@ -5,7 +5,6 @@ import pytest
 from src.config.config import (
     GRID_SIZE_M,
     PPM,
-    SAFE_ZONE_CELLS,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
 )
