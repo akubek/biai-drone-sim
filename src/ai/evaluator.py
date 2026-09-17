@@ -5,6 +5,7 @@ from src.config.config import *
 from src.core.environment import generate_start_and_target
 from src.core.map_generator import generate_grid_obstacles
 
+
 class CurriculumParallelEvaluator(neat.ParallelEvaluator):
     def __init__(self, num_workers, eval_function, training_state: TrainingState, timeout=None):
         super().__init__(num_workers, eval_function, timeout)
@@ -19,7 +20,7 @@ class CurriculumParallelEvaluator(neat.ParallelEvaluator):
             SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
         )
     
-        obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, self.state.num_obstacles, SAFE_ZONE_CELLS, PPM)
+        obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px, GRID_SIZE_M, self.state.num_obstacles, PPM)
         
         # 2. WSTRZYKIWANIE CONFIGU: Dynamicznie doklejamy pola do obiektu NEAT
         # Dzięki temu zostaną one bezpiecznie skopiowane do każdego procesu roboczego!

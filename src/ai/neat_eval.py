@@ -36,8 +36,6 @@ render_graphics = True
 target_fps = FPS
 uncapped = False
 
-
-USE_FLIGHT_CONTROLLER = False
 global_flight_controller = FlightController()
 
 global_state: TrainingState
@@ -318,7 +316,6 @@ def step_training_drone(
 
 def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> float:
     """Samotna symulacja jednego drona dla pojedynczego rdzenia procesora."""
-    is_cascade = (config.genome_config.num_inputs == 16)
     expert = HardcodedBrain()
 
     help_weight = getattr(config, 'current_help_weight', 0.0)
@@ -336,6 +333,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
     max_frames = FPS * SIMULATION_TIME
     dt = 1.0 / FPS
     current_frame = 0
+    use_cascade = cast(Any, config).use_cascade
 
     # Główna pętla logiczna - kręci się tak szybko, jak pozwala procesor
     while current_frame < max_frames:
@@ -353,7 +351,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
             help_weight=help_weight,
             obstacles=obstacles,
             difficulty_multiplier=1.0,
-            use_cascade=is_cascade,
+            use_cascade=use_cascade,
         )
         if should_remove:
             break
@@ -375,7 +373,6 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
     clock = pygame.time.Clock()
 
     expert = HardcodedBrain()
-    is_cascade = (config.genome_config.num_inputs == 16)
 
     global_state.update_parameters()
 
@@ -414,7 +411,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             SCREEN_WIDTH, SCREEN_HEIGHT,
             start_px, target_px,
             GRID_SIZE_M, global_state.num_obstacles,
-            SAFE_ZONE_CELLS, PPM
+            PPM
         )
 
         for _, genome in genomes:
@@ -472,7 +469,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     help_weight=global_state.current_help_weight,
                     obstacles=obstacles,
                     difficulty_multiplier=1.0,
-                    use_cascade=is_cascade,
+                    use_cascade=cast(Any, config).use_cascade,
                     SCREEN_WIDTH=SCREEN_WIDTH,
                     SCREEN_HEIGHT=SCREEN_HEIGHT,
                     PPM=PPM
@@ -533,8 +530,6 @@ def run_neat_visual(
     exp_config: dict | None = None
 ) -> None:
     """Runs the NEAT evolution in visual mode with a Pygame window."""
-    global USE_FLIGHT_CONTROLLER
-    USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
     global_state = TrainingState(exp_config=exp_config)
     # 1. Setup the Pygame window
@@ -550,7 +545,8 @@ def run_neat_visual(
     print(f"RUN DIR: {run_dir}")
 
     # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
-    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
+    population, config = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
+    cast(Any, config).use_cascade = use_cascade
 
     reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)
@@ -580,8 +576,6 @@ def run_neat_headless(
     exp_config: dict | None = None
 ) -> None:
     """Runs the NEAT evolution on all CPU cores without a GUI."""
-    global USE_FLIGHT_CONTROLLER
-    USE_FLIGHT_CONTROLLER = use_cascade
     global global_state
     global_state = TrainingState(exp_config=exp_config)
 
@@ -590,7 +584,9 @@ def run_neat_headless(
     # Create a directory for the results of this run
     run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
     print(f"RUN DIR: {run_dir}")
-    population, _ = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
+    
+    population, config = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
+    cast(Any, config).use_cascade = use_cascade
 
     reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)

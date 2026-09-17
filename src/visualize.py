@@ -1,11 +1,13 @@
 import pickle
-import neat
-import graphviz
+from ctypes import cast
+from typing import Any
 
-def draw_net(config, genome, filename="best_network_layered"):
+import graphviz
+import neat
+
+
+def draw_net(config, genome, is_cascade: bool, filename="best_network_layered"):
     """Rysuje graf sieci neuronowej NEAT w ułożeniu warstwowym (Lewa -> Prawa)."""
-    num_inputs = len(config.genome_config.input_keys)
-    is_cascade = (num_inputs == 16)
     # 1. Twój słownik z nazwami (indeksy wejść w neat-python są ujemne)
     # Upewnij się, że kolejność zgadza się z Twoją tablicą state_inputs!
     node_names = {
@@ -69,7 +71,7 @@ def draw_net(config, genome, filename="best_network_layered"):
     dot.subgraph(s_out)
 
     # 3. WĘZŁY UKRYTE (Też mają bias!)
-    hidden_nodes = [n for n in genome.nodes.keys() if n not in outputs]
+    hidden_nodes = [n for n in genome.nodes if n not in outputs]
     for n in hidden_nodes:
         bias = genome.nodes[n].bias
         label = f"N_{n}\n[b: {bias:+.2f}]"
@@ -107,4 +109,4 @@ config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
 with open("models/best_drone_cascade.pkl", "rb") as f:
     winner = pickle.load(f)
 
-draw_net(config, winner)
+draw_net(config, winner, is_cascade=cast(Any, config).use_cascade)
