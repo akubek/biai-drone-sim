@@ -1,7 +1,6 @@
 import math
 import multiprocessing
 import pickle
-import random
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -144,7 +143,6 @@ def apply_fitness_rules(
         target_m: tuple[float, float], 
         dt: float, 
         obstacles: list, 
-        difficulty_multiplier: float = 1.0,
         SCREEN_WIDTH: int = SCREEN_WIDTH,
         SCREEN_HEIGHT: int = SCREEN_HEIGHT,
         PPM: float = PPM
@@ -155,8 +153,6 @@ def apply_fitness_rules(
     success = False
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
     genome_any = cast(Any, genome)
-
-    dist_m: float = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
@@ -254,7 +250,6 @@ def step_training_drone(
     expert: HardcodedBrain,
     help_weight: float,
     obstacles: list[pygame.Rect],
-    difficulty_multiplier: float,
     use_cascade: bool,
     SCREEN_WIDTH: int = SCREEN_WIDTH,
     SCREEN_HEIGHT: int = SCREEN_HEIGHT,
@@ -307,7 +302,6 @@ def step_training_drone(
         target_m=target_m,
         dt=dt,
         obstacles=obstacles,
-        difficulty_multiplier=difficulty_multiplier,
         SCREEN_WIDTH=SCREEN_WIDTH,
         SCREEN_HEIGHT=SCREEN_HEIGHT,
         PPM=PPM
@@ -350,7 +344,6 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
             expert=expert,
             help_weight=help_weight,
             obstacles=obstacles,
-            difficulty_multiplier=1.0,
             use_cascade=use_cascade,
         )
         if should_remove:
@@ -399,10 +392,6 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
         # 'expert' drone that already knows how to fly
         # Setup środowiska
-        target_px = (
-            random.randint(100, SCREEN_WIDTH - 100),
-            random.randint(100, SCREEN_HEIGHT - 100),
-        )
         start_px, target_px = generate_start_and_target(
             SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
         )
@@ -468,7 +457,6 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     expert=expert,
                     help_weight=global_state.current_help_weight,
                     obstacles=obstacles,
-                    difficulty_multiplier=1.0,
                     use_cascade=cast(Any, config).use_cascade,
                     SCREEN_WIDTH=SCREEN_WIDTH,
                     SCREEN_HEIGHT=SCREEN_HEIGHT,

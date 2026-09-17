@@ -185,7 +185,6 @@ def test_baseline() -> None:
             target_m=target_m,
             dt=dt,
             obstacles=obstacles,
-            difficulty_multiplier=1.0,
             SCREEN_WIDTH=SCREEN_WIDTH,
             SCREEN_HEIGHT=SCREEN_HEIGHT,
             PPM=PPM

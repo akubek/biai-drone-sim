@@ -2,6 +2,7 @@ import heapq
 import math
 import pygame
 
+# nieużywane, planowane
 
 def get_expert_path(
     start_px,

@@ -5,7 +5,7 @@ import random
 import sys
 
 from src.ai import neat_eval
-from src.utils import sim_runner, test_physics
+from src.utils import manual_flight, sim_runner
 
 
 def parse_and_run() -> None:
@@ -140,7 +140,7 @@ def parse_and_run() -> None:
 
     elif args.mode == "manual":
         print("MODE: MANUAL (Test physics and controller with keyboard)")
-        test_physics.test_manual_flight()
+        manual_flight.run_manual_flight()
 
     elif args.mode == "baseline":
         print("MODE: BASELINE (Test built-in Expert)")

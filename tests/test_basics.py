@@ -19,13 +19,13 @@ def test_hover_thrust_keeps_altitude():
     y_start = drone._y
 
     drone.set_engine_thrust(hover, hover)
-    for _ in range(120):                       # 2 sekundy przy 60 Hz
+    for _ in range(300):                       # 5 sekund przy 60 Hz
         drone.update(1.0 / 60.0)
 
     # Zmierzone przed Milestone 1: dryf 0.152 m, v_y -> 0 po ok. 5 s.
     # Blad startowy (silniki rozpedzaja sie od zera), nie ciagly dryf - swiadomie nie naprawiany.
     assert abs(drone._y - y_start) < 0.20, f"dryf {drone._y - y_start:.3f} m"
-    assert abs(drone._vel_y) < 0.01, f"predkosc w stanie ustalonym {drone._vel_y:.4f} m/s"
+    assert abs(drone._vel_y) < 0.01, f"predkosc w stanie ustalonym (po 5s) {drone._vel_y:.4f} m/s"
 
 
 def test_obstacle_count_is_exact():

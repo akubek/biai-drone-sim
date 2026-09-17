@@ -4,7 +4,7 @@ FIT_START_CAPITAL = 0.0
 # --- KARY (Punktowe) ---
 FIT_CRASH_BASE_PENALTY = 5.0   # Płaska kara za uderzenie w przeszkodę
 FIT_KAMIKAZE_PENALTY = 15.0     # Dodatkowa kara za uderzenie bez hamowania
-FIT_EXPERT_PENALTY_MULT = 10.0  # Kara za ignorowanie eksperta (Imitation Learning)
+#FIT_EXPERT_PENALTY_MULT = 10.0  # Kara za ignorowanie eksperta (Imitation Learning)
 
 # --- NAGRODY I BONUSY ---
 FIT_DISCOVERY_BONUS = 100.0      # Jednorazowa nagroda za dotknięcie celu

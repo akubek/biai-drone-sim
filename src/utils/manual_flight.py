@@ -1,13 +1,15 @@
-import pygame
 import sys
-import math
+
+import pygame
+
+from src.config.config import SCREEN_HEIGHT, SCREEN_WIDTH
 
 # Dostosuj importy do nowej struktury
 from src.core.drone import Drone
-from src.config.config import SCREEN_WIDTH, SCREEN_HEIGHT
 from src.core.flight_controller import FlightController
 
-def test_manual_flight():
+
+def run_manual_flight():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Fizyka Drona - TEST MANUALNY (Spacja by zmienić tryb)")
@@ -88,7 +90,7 @@ def test_manual_flight():
         drone.draw(screen, target_pos_m, PPM, show_sensors=True, show_thrust=True)
 
         # UI Overlay
-        txt_info = font.render(f"Space to change mode between manual and cascade(flight controller)", True, (255, 255, 255))
+        txt_info = font.render("Space to change mode between manual and cascade(flight controller)", True, (255, 255, 255))
         screen.blit(txt_info, (10, 10))
 
         color = (0, 255, 0) if mode == "CASCADE" else (255, 0, 0)
