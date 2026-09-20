@@ -1,6 +1,17 @@
 import math
+
 import pygame
 
+from src.config.config import PPM
+from src.config.physics import (
+    ANGULAR_DRAG,
+    DRAG,
+    GRAVITY,
+    MAX_ANGULAR_NORM,
+    MAX_SENSOR_DIST_M,
+    MAX_SPEED_NORM,
+    RAYCAST_STEP_M,
+)
 from src.utils.drawing import draw_vector
 
 
@@ -18,14 +29,14 @@ class Drone:
         engine_offset_m: float = 0.175,  # [m] - ramię siły (odległość silnika od środka). Domyślnie połowa szerokości.
         engine_response_rate: float = 60.0,  # response rate const Hz
         # physics simulation parameters
-        gravity: float = 9.81,  # [m/s^2]
-        drag_coeff: float = 0.5,  # [kg/s]        angular_drag: float = 0.0,
-        angular_drag: float = 0.05,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
+        gravity: float = GRAVITY,  # [m/s^2]
+        drag_coeff: float = DRAG,  # [kg/s]        angular_drag: float = 0.0,
+        angular_drag: float = ANGULAR_DRAG,  # [kg*m^2/s] - opór powietrza przy obracaniu się (żeby dron nie kręcił się w nieskończoność)
         # sensor parameters
         distance_sensor_count: int = 8,  # amount of distance sensord (equally distributed)
-        max_sensor_dist: float = 2.5,  # [m]
-        raycast_step_m: float = 0.1,  # [m]
-        PPM: float = 200,  # pixels per meter
+        max_sensor_dist: float = MAX_SENSOR_DIST_M,  # [m]
+        raycast_step_m: float = RAYCAST_STEP_M,  # [m]
+        PPM: float = PPM,  # pixels per meter
     ) -> None:
         self.mass: float = mass
         self.width_m: float = width_m
@@ -150,8 +161,7 @@ class Drone:
                 dist_to_edge = math.hypot(
                     exit_point[0] - start_x_px, exit_point[1] - start_y_px
                 )
-                if dist_to_edge < closest_dist_px:
-                    closest_dist_px = dist_to_edge
+                closest_dist_px = min(closest_dist_px, dist_to_edge)
             else:
                 # Dron znajduje się całkowicie poza ekranem w miejscu startu (kara w ewolucji go zdejmie)
                 closest_dist_px: float = 0.0
@@ -164,8 +174,7 @@ class Drone:
                     # clipped[0] to punkt, w którym promień wchodzi w przeszkodę
                     hit_x, hit_y = clipped[0]
                     dist_to_obs = math.hypot(hit_x - start_x_px, hit_y - start_y_px)
-                    if dist_to_obs < closest_dist_px:
-                        closest_dist_px = dist_to_obs
+                    closest_dist_px = min(closest_dist_px, dist_to_obs)
 
             # 3. Zapisz i przelicz wynik Z POWROTEM NA METRY!
             final_dist_m: float = closest_dist_px / PPM
@@ -417,11 +426,11 @@ class Drone:
         local_vy = (-self._vel_x * s_angle) + (self._vel_y * c_angle)
         
         # Normalizacja prędkości (zakładamy 15 m/s za max)
-        norm_local_vx = max(-1.0, min(1.0, local_vx / 15.0))
-        norm_local_vy = max(-1.0, min(1.0, local_vy / 15.0))
+        norm_local_vx = max(-1.0, min(1.0, local_vx / MAX_SPEED_NORM))
+        norm_local_vy = max(-1.0, min(1.0, local_vy / MAX_SPEED_NORM))
         
         # Prędkość kątowa
-        norm_angular_vel = math.tanh(self._angular_vel / 5.0)
+        norm_angular_vel = math.tanh(self._angular_vel / MAX_ANGULAR_NORM)
 
         # 3. ABSOLUTNA POZYCJA I GRAWITACJA
         # Sieć musi wiedzieć jak jest przechylona względem pionu (grawitacji)
