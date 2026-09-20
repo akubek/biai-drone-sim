@@ -3,6 +3,7 @@ import random
 import neat
 import pytest
 
+from src.ai.neat_eval import apply_fitness_rules
 from src.config.config import (
     GRID_SIZE_M,
     PPM,
@@ -11,6 +12,7 @@ from src.config.config import (
 )
 from src.core.drone import Drone
 from src.core.map_generator import generate_grid_obstacles
+from src.core.stats import EndReason, EvolutionStats
 
 
 def test_hover_thrust_keeps_altitude():
@@ -120,3 +122,29 @@ def test_genomes_share_node_keys(conf):
     assert len(shared) == len(g0.connections), \
         f"only {len(shared)}/{len(g0.connections)} shared connections - num_hidden > 0?"
     assert g0.distance(g1, config.genome_config) < 1.0, "initial genomes are too distant"
+
+def test_crash_returns_crash_reason():
+    """Drone spawned in a wall must return EndReason.CRASH."""
+    drone = Drone(0.1, 1.0)          # tuz przy lewej krawedzi
+    stats = EvolutionStats(initial_dist_m=2.0, min_dist_m=2.0,
+                           last_stagnation_dist_m=2.0,
+                           max_allowed_escape_dist_m=10.0)
+
+    class G:
+        fitness = 0.0
+
+    reason = apply_fitness_rules(drone, stats, G(), (2.0, 1.0), 1 / 60, [])
+    assert reason is EndReason.CRASH
+
+
+def test_normal_flight_returns_none():
+    """Drone in the middle of the map, without collisions, should continue flying."""
+    drone = Drone(2.5, 1.8)
+    stats = EvolutionStats(initial_dist_m=1.0, min_dist_m=1.0,
+                           last_stagnation_dist_m=1.0,
+                           max_allowed_escape_dist_m=10.0)
+
+    class G:
+        fitness = 0.0
+
+    assert apply_fitness_rules(drone, stats, G(), (3.0, 1.8), 1 / 60, []) is None

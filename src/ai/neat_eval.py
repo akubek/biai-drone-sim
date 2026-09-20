@@ -3,7 +3,7 @@ import multiprocessing
 import pickle
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Counter, cast
 
 import neat
 import pygame
@@ -20,7 +20,7 @@ from src.core.drone import Drone
 from src.core.environment import generate_start_and_target
 from src.core.flight_controller import FlightController
 from src.core.map_generator import generate_grid_obstacles
-from src.core.stats import EvolutionStats
+from src.core.stats import EndReason, EpisodeResult, EvolutionStats
 from src.utils.logger import CSVTrainingReporter
 from src.utils.renderer import render_neat_hud, render_simulation
 from src.utils.run_manager import create_run_dir
@@ -171,22 +171,20 @@ def apply_fitness_rules(
         SCREEN_HEIGHT: int = SCREEN_HEIGHT,
         PPM: float = PPM
 
-        ) -> tuple[bool, bool]:
-    """Calculates fitness and returns whether the drone has succeeded or crashed/stuck."""
-    to_remove = False
-    success = False
+        ) -> EndReason | None:
+    """Calculates fitness and returns the reason for the end of the episode or none if the episode (flight) is still ongoing."""
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
     genome_any = cast(Any, genome)
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
-        return False, True #(success, to_remove)
+        return EndReason.ESCAPE
 
     # spinout check
     if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
         stats.spinout_time += dt
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
-            return False, True #(success, to_remove)
+            return EndReason.SPINOUT
     else:
         stats.spinout_time = 0
 
@@ -223,7 +221,7 @@ def apply_fitness_rules(
             genome_any.fitness -= FIT_KAMIKAZE_PENALTY
 
         genome_any.fitness = max(0.1, genome_any.fitness)
-        return False, True  # (success, to_remove)
+        return EndReason.CRASH
 
     if dist_m < (TARGET_SIZE_PX / PPM):
         stats.time_without_progress = 0  # reset stagnation time
@@ -250,8 +248,7 @@ def apply_fitness_rules(
         # 3. PEŁNY SUKCES (Ukończenie poziomu)
         if stats.hover_time >= HOVER_REQUIRED_SEC:
             genome_any.fitness += FIT_HOVER_SUCCESS_REWARD
-            success = True
-            to_remove = True
+            return EndReason.SUCCESS
 
     else:
         stats.hover_time = 0
@@ -259,9 +256,9 @@ def apply_fitness_rules(
     genome_any.fitness = max(0.1, genome_any.fitness)
     
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:
-        to_remove = True 
+        return EndReason.STAGNATION
 
-    return success, to_remove
+    return None
 
 def step_training_drone(
     #current_frame: int,
@@ -278,9 +275,8 @@ def step_training_drone(
     SCREEN_WIDTH: int = SCREEN_WIDTH,
     SCREEN_HEIGHT: int = SCREEN_HEIGHT,
     PPM: float = PPM
-) -> tuple[bool, bool]:
+) -> EndReason | None:
     #current_time = current_frame * dt
-    to_remove = False
 
     # get inpputs from drone sensors and internal states
     state_inputs = drone.get_inputs(
@@ -317,7 +313,9 @@ def step_training_drone(
 
     drone.set_engine_thrust(final_left_thrust, final_right_thrust)
 
-    drone.update(dt)  
+    drone.update(dt)
+    stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
+    stats.total_time_alive += dt
 
     return apply_fitness_rules(
         drone=drone,
@@ -353,12 +351,12 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
     current_frame = 0
     use_cascade = cast(Any, config).use_cascade
 
-    # Główna pętla logiczna - kręci się tak szybko, jak pozwala procesor
+    end_reason: EndReason | None = None
+
     while current_frame < max_frames:
         current_frame += 1
         
-        success, should_remove = step_training_drone(
-            #current_frame=current_frame,
+        end_reason = step_training_drone(
             dt=dt,
             drone=drone,
             target_m=target_m,
@@ -370,12 +368,21 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
             obstacles=obstacles,
             use_cascade=use_cascade,
         )
-        if should_remove:
+
+        if end_reason is not None:
             break
 
-        # save the success state in the genome for later analysis
-        if success:
-            cast(Any, genome).is_success = True
+    #reached end with no success -> timeout
+    if end_reason is None:
+        end_reason = EndReason.TIMEOUT
+
+    # save the success state in the genome for later analysis
+    result = EpisodeResult.from_stats(
+        stats=stats,
+        fitness=cast(Any, genome).fitness,
+        reason=end_reason,
+        max_episode_time_s=SIMULATION_TIME
+    )
 
     return cast(Any, genome).fitness
 
@@ -442,6 +449,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         dt = 1.0 / FPS
         current_frame = 0
         max_best_fitness = 0.0
+        episode_results: dict[int, EpisodeResult] = {}
 
         while current_frame < max_frames and drones:
             current_frame += 1
@@ -470,8 +478,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             # 3. CZYSTA LOGIKA (Dla każdego drona)
             to_remove = []
             for i, drone in enumerate(drones):
-                success, should_remove = step_training_drone(
-                    #current_frame=current_frame,
+                end_reason = step_training_drone(
                     dt=dt,
                     drone=drone,
                     target_m=target_m,
@@ -487,11 +494,13 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     PPM=PPM
                 )
 
-                # save the success state in the genome for later analysis
-                if success:
-                    cast(Any, ge[i]).is_success = True
-
-                if should_remove:
+                if end_reason is not None:
+                    episode_results[ge[i]] = EpisodeResult.from_stats(
+                        stats=stats_list[i],
+                        fitness=cast(Any, ge[i]).fitness,
+                        reason=end_reason,
+                        max_episode_time_s=SIMULATION_TIME
+                    )
                     to_remove.append(i)
 
             for index in reversed(to_remove):
@@ -511,10 +520,15 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     best_fitness=max_best_fitness,
                     current_time_sec=current_time_sec
                 )
-                # Możesz dodać proste info na ekranie:
-                # font.render(f"FPS: {int(clock.get_fps())} | Render: {render_graphics}", ...)
                 pygame.display.flip()
-        
+
+        for i in range(len(drones)):
+            episode_results[ge[i].key] = EpisodeResult.from_stats(
+                stats=stats_list[i],
+                fitness=cast(Any, ge[i]).fitness,
+                reason=EndReason.TIMEOUT,
+                max_episode_time_s=SIMULATION_TIME,
+            )
         # Koniec rundy! Dodajemy wynik z tej rundy do tego, co zapisaliśmy wcześniej
         # todo - ewentualnie naliczyć premie za trudność - mnożnik na podstawie eksperta albo inny
         for genome_id, genome in genomes:
@@ -522,6 +536,10 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             round_score = genome_any.fitness
             # Łączymy "bank" z poprzednich rund z tym, co ugrał w tej
             genome_any.fitness = saved_fitness[genome_id] + round_score
+
+    counts = Counter(r.end_reason.value for r in episode_results.values())
+    total = sum(counts.values())
+    print(f"gen {global_state.generation}: {dict(counts)} | suma {total}/{total_population}")
 
     # po wszystkich rundach całkowity fitness
     num_rounds = len(scenarios)
