@@ -38,16 +38,38 @@ uncapped = False
 global_flight_controller = FlightController()
 
 global_state: TrainingState
+NET_BUILDERS = {
+    "feedforward": neat.nn.FeedForwardNetwork.create,
+    "recurrent": neat.nn.RecurrentNetwork.create,
+}
 
 # =====================================================================
 # METODY POMOCNICZE (ŚRODOWISKO I EWALUACJA)
 # =====================================================================
-def _setup_population(config_path: str, checkpoint: str | None, pop_size: int | None, run_dir: str | None) -> tuple[neat.Population, neat.Config]:
-    """Wspólna funkcja wczytująca konfigurację, checkpointy i reporterów."""
+def _apply_net_type(config: neat.Config, net_type: str):
+    """Applies the network type to the NEAT configuration and returns the corresponding network builder."""
+    if net_type not in NET_BUILDERS:
+        raise ValueError(f"Unknown net_type: {net_type}")
+    config.genome_config.feed_forward = (net_type == "feedforward")
+    cast(Any, config).net_type = net_type
+    return NET_BUILDERS[net_type]
+
+def _setup_population(
+        config_path: str,
+        checkpoint: str | None,
+        pop_size: int | None,
+        run_dir: str | None,
+        net_type: str = "feedforward",
+        use_cascade: bool = True,
+    ) -> tuple[neat.Population, neat.Config]:
+    """Shared setup for NEAT population, including checkpoint handling and reporters."""
     config = neat.Config(
         neat.DefaultGenome, neat.DefaultReproduction,
         neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path
     )
+
+    _apply_net_type(config, net_type)
+    cast(Any, config).use_cascade = use_cascade
 
     checkpoint_dir = Path(run_dir) / "checkpoints" if run_dir else Path("checkpoints")
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -64,17 +86,17 @@ def _setup_population(config_path: str, checkpoint: str | None, pop_size: int | 
         if checkpoints:
             latest_checkpoint_path = max(checkpoints, key=lambda x: int(x.name.split("-")[-1]))
             checkpoint = str(latest_checkpoint_path)
-            print(f"Znaleziono najnowszy zapis: {checkpoint}")
+            print(f"Found latest checkpoint: {checkpoint}")
         else:
-            print("Folder 'checkpoints' jest pusty. Zaczynamy od zera.")
+            print("The 'checkpoints' folder is empty. Starting from scratch.")
             checkpoint = None
 
     # 2. Tworzenie populacji
     if checkpoint is not None:
-        print(f"Wczytywanie stanu ewolucji z pliku: {checkpoint}")
+        print(f"Restoring evolution state from checkpoint: {checkpoint}")
         population = neat.Checkpointer.restore_checkpoint(checkpoint)
     else:
-        print("Tworzenie nowej populacji od zera...")
+        print("Loading new population from scratch...")
         population = neat.Population(config)
 
     # 3. Reporterzy (Wypisywanie w konsoli i zapisywanie plików)
@@ -91,13 +113,15 @@ def _prepare_drone_and_stats(
     start_px: tuple[int, int], 
     target_px: tuple[int, int], 
     PPM: float
-) -> tuple[neat.nn.FeedForwardNetwork, Drone, EvolutionStats]:
-    """Tworzy sieć, fizycznego drona i inicjalizuje statystyki z limitami."""
+) -> tuple[Any, Drone, EvolutionStats]:
+    """Creates the network, the physical drone, and initializes statistics with limits."""
     
     # 1. Sieć NEAT
     genome_any = cast(Any, genome)
     genome_any.fitness = FIT_START_CAPITAL
-    net = neat.nn.FeedForwardNetwork.create(genome, config)
+
+    builder = NET_BUILDERS[cast(Any, config).net_type]
+    net = builder(genome, config)
 
     # 2. Fizyczny Dron
     drone_x, drone_y = start_px[0] / PPM, start_px[1] / PPM
@@ -126,7 +150,7 @@ def _remove_drone(
     index: int,
     drones: list[Drone],
     stats: list[EvolutionStats],
-    nets: list[neat.nn.FeedForwardNetwork],
+    nets: list[Any],
     ge: list[neat.DefaultGenome],
 ) -> None:
     # remove from simulation
@@ -148,7 +172,7 @@ def apply_fitness_rules(
         PPM: float = PPM
 
         ) -> tuple[bool, bool]:
-    """Nalicza punkty i zwraca czy dron osiagnał sukces, czy się rozbił/utknał"""
+    """Calculates fitness and returns whether the drone has succeeded or crashed/stuck."""
     to_remove = False
     success = False
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
@@ -158,7 +182,7 @@ def apply_fitness_rules(
     if dist_m > stats.max_allowed_escape_dist_m:
         return False, True #(success, to_remove)
 
-    # siponout check
+    # spinout check
     if abs(drone._angular_vel) > MAX_SAFE_ANGULAR_VEL:
         stats.spinout_time += dt
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
@@ -309,7 +333,7 @@ def step_training_drone(
 
 
 def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> float:
-    """Samotna symulacja jednego drona dla pojedynczego rdzenia procesora."""
+    """Single simulation of one drone for a single CPU core."""
     expert = HardcodedBrain()
 
     help_weight = getattr(config, 'current_help_weight', 0.0)
@@ -369,23 +393,23 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
     global_state.update_parameters()
 
-    #do przemyślenia zachowanie eksperta, oceny fitnessu po przejściu do trudniejszych scenariuszy
+    # TODO: Consider expert behavior and fitness evaluation after moving to more challenging scenarios
 
     for genome_id, genome in genomes:
         cast(Any, genome).fitness = FIT_START_CAPITAL
 
     # 2. Definiujemy nasze 3 rundy (Test Suite)
     scenarios: list[tuple[str, int]] = [
-        ("Runda 1: Otwarte Niebo", 0),
-        # ("Runda 2: Standard", 3),
-        # ("Runda 3: Tor Przeszkód", 4),
+        ("Round 1: Open Sky", 0),
+        # ("Round 2: Standard", 3),
+        # ("Round 3: Obstacle Course", 4),
     ]
 
     total_population = len(genomes)
     
     for round_name, num_obs in scenarios:
         saved_fitness = {genome_id: cast(Any, g).fitness for genome_id, g in genomes}
-        nets: list[neat.nn.FeedForwardNetwork] = []
+        nets: list[Any] = []
         ge: list[neat.DefaultGenome] = []
         drones: list[Drone] = []
         stats_list: list[EvolutionStats] = []
@@ -520,7 +544,7 @@ def run_neat_visual(
     """Runs the NEAT evolution in visual mode with a Pygame window."""
     global global_state
     global_state = TrainingState(exp_config=exp_config)
-    # 1. Setup the Pygame window
+    # Setup the Pygame window
     pygame.init()
     pygame.font.init()
     pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -528,13 +552,17 @@ def run_neat_visual(
 
     exp_config = exp_config or {}
     generations = exp_config.get("generations", EVOLUTION_CYCLES)
-    # Create a directory for the results of this run
     run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
     print(f"RUN DIR: {run_dir}")
 
-    # 2. Pobranie gotowej populacji z naszej funkcji pomocniczej
-    population, config = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
-    cast(Any, config).use_cascade = use_cascade
+    population, _ = _setup_population(
+        config_path,
+        checkpoint,
+        pop_size=exp_config.get("pop_size"),
+        run_dir=str(run_dir),
+        net_type=exp_config.get("net_type", "feedforward"),
+        use_cascade=use_cascade,
+    )
 
     reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)
@@ -542,9 +570,9 @@ def run_neat_visual(
 
     print("Starting evolution in VISUAL mode...")
     
-    # Uruchamiamy eval_genomes_visual (Twój zrefaktoryzowany kod z poprzednich kroków)
     winner = population.run(_eval_genomes_visual, generations)
 
+    # Save the best genome and quit the pygame window
     print(f"\nBest genome found:\n{winner}")
     with open(run_dir / "best_drone.pkl", "wb") as f:
         pickle.dump(winner, f)
@@ -569,12 +597,17 @@ def run_neat_headless(
 
     exp_config = exp_config or {}
     generations = exp_config.get("generations", EVOLUTION_CYCLES)
-    # Create a directory for the results of this run
     run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
     print(f"RUN DIR: {run_dir}")
     
-    population, config = _setup_population(config_path, checkpoint, pop_size=exp_config.get("pop_size"), run_dir=str(run_dir))
-    cast(Any, config).use_cascade = use_cascade
+    population, _ = _setup_population(
+        config_path,
+        checkpoint,
+        pop_size=exp_config.get("pop_size"),
+        run_dir=str(run_dir),
+        use_cascade=use_cascade,
+        net_type=exp_config.get("net_type", "feedforward"),
+    )
 
     reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
     population.add_reporter(reporter)
@@ -586,9 +619,9 @@ def run_neat_headless(
     parallel_evaluator = CurriculumParallelEvaluator(num_cores, _eval_genome_headless, global_state)
 
     # Create a Parallel Evaluator using the _eval_genome_headless function for a single drone
-    
     winner = population.run(parallel_evaluator.evaluate, generations)
 
+    # Save the best genome
     print(f"\nBest genome found:\n{winner}")
     model_path = run_dir / "best_drone.pkl"
     with open(model_path, "wb") as f:

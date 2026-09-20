@@ -1,5 +1,6 @@
 import random
 
+import neat
 import pytest
 
 from src.config.config import (
@@ -13,7 +14,7 @@ from src.core.map_generator import generate_grid_obstacles
 
 
 def test_hover_thrust_keeps_altitude():
-    """Ciag rownowazacy grawitacje na obu silnikach = brak opadania."""
+    """Continuous thrust counteracting gravity on both engines = no descent."""
     drone = Drone(2.0, 1.5)
     hover = (drone.mass * drone.gravity) / (2 * drone.max_thrust)
     y_start = drone._y
@@ -24,8 +25,8 @@ def test_hover_thrust_keeps_altitude():
 
     # Zmierzone przed Milestone 1: dryf 0.152 m, v_y -> 0 po ok. 5 s.
     # Blad startowy (silniki rozpedzaja sie od zera), nie ciagly dryf - swiadomie nie naprawiany.
-    assert abs(drone._y - y_start) < 0.20, f"dryf {drone._y - y_start:.3f} m"
-    assert abs(drone._vel_y) < 0.01, f"predkosc w stanie ustalonym (po 5s) {drone._vel_y:.4f} m/s"
+    assert abs(drone._y - y_start) < 0.20, f"drift {drone._y - y_start:.3f} m"
+    assert abs(drone._vel_y) < 0.01, f"velocity in steady state (after 5s) {drone._vel_y:.4f} m/s"
 
 
 def test_obstacle_count_is_exact():
@@ -37,12 +38,12 @@ def test_obstacle_count_is_exact():
                 GRID_SIZE_M, requested, PPM,
             )
             assert len(obstacles) == requested, \
-                f"seed={seed}, zamowiono {requested}, dostano {len(obstacles)}"
+                f"seed={seed}, requested {requested}, got {len(obstacles)}"
 
 
 @pytest.mark.parametrize("use_cascade,expected", [(True, 16), (False, 18)])
 def test_input_vector_shape_and_range(use_cascade, expected):
-    """Liczba wejsc musi zgadzac sie z conf/neat-*.txt, wartosci znormalizowane."""
+    """The number of inputs must match conf/neat-*.txt, values are normalized."""
     drone = Drone(2.0, 1.5)
     inputs = drone.get_inputs(
         target_pos_m=(3.0, 1.0),
@@ -51,11 +52,11 @@ def test_input_vector_shape_and_range(use_cascade, expected):
     )
     assert len(inputs) == expected
     assert all(-1.0 <= v <= 1.0 for v in inputs), \
-        f"poza zakresem: {[v for v in inputs if not -1.0 <= v <= 1.0]}"
+        f"out of range: {[v for v in inputs if not -1.0 <= v <= 1.0]}"
 
 
 def test_collision_detected_at_screen_edge():
-    """Dron poza mapa musi byc wykryty jako kolizja, w srodku - nie."""
+    """Drone outside the map must be detected as a collision, inside - not."""
     inside = Drone(SCREEN_WIDTH / PPM / 2, SCREEN_HEIGHT / PPM / 2)
     assert not inside.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, [], PPM)
 
@@ -63,10 +64,10 @@ def test_collision_detected_at_screen_edge():
     assert outside.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, [], PPM)
 
 def test_hover_drift_report(capsys):
-    """Pomiar dryfu w stanie ustalonym - czy statyczny hover thrust wystarcza.
+    """Drift measurement in steady state - does static hover thrust suffice?
 
-    Nie jest to test typu pass/fail, tylko pomiar do decyzji w #9b.
-    Uruchom z -s, zeby zobaczyc liczby.
+    This is not a pass/fail test, but a measurement for decision making in #9b.
+    Run with -s to see the numbers.
     """
     drone = Drone(2.0, 1.5)
     hover = (drone.mass * drone.gravity) / (2 * drone.max_thrust)
@@ -83,9 +84,39 @@ def test_hover_drift_report(capsys):
             checkpoints[t] = (drone._y - y_start, drone._vel_y)
 
     with capsys.disabled():
-        print("\n--- Dryf przy statycznym hover thrust ---")
+        print("\n--- Drift with static hover thrust ---")
         for t, (drift, vel) in checkpoints.items():
-            print(f"  t={t:5.1f}s   dryf={drift:+.4f} m   v_y={vel:+.4f} m/s")
+            print(f"  t={t:5.1f}s   drift={drift:+.4f} m   v_y={vel:+.4f} m/s")
 
-    # Asercja tylko na rzeczy jawnie zepsute (zly znak, brak grawitacji, zle jednostki).
-    assert abs(drone._y - y_start) < 1.0, "dryf powyzej metra - cos jest fundamentalnie nie tak"
+    # Assertion only for obviously broken cases (wrong sign, no gravity, wrong units).
+    assert abs(drone._y - y_start) < 1.0, "drift above one meter - something is fundamentally wrong"
+
+@pytest.mark.parametrize("conf", ["conf/neat-cascade.txt", "conf/neat-e2e.txt"])
+def test_network_is_not_dead(conf):
+    """Network must react to inputs. A mismatch between feed_forward and the builder results in all zeros."""
+    config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation, conf)
+    pop = neat.Population(config)
+    genome = next(iter(pop.population.values()))
+    net = neat.nn.FeedForwardNetwork.create(genome, config)
+
+    n = config.genome_config.num_inputs
+    out_a = net.activate([0.5] * n)
+    out_b = net.activate([-0.9, 0.8] + [0.1] * (n - 2))
+
+    assert any(v != 0.0 for v in out_a), "network returns all zeros - check feed_forward"
+    assert out_a != out_b, "network does not react to input change"
+
+
+@pytest.mark.parametrize("conf", ["conf/neat-cascade.txt", "conf/neat-e2e.txt"])
+def test_genomes_share_node_keys(conf):
+    """Genomes must share node keys, otherwise distance and crossover are meaningless."""
+    config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                         neat.DefaultSpeciesSet, neat.DefaultStagnation, conf)
+    pop = neat.Population(config)
+    g0, g1 = list(pop.population.values())[:2]
+
+    shared = set(g0.connections) & set(g1.connections)
+    assert len(shared) == len(g0.connections), \
+        f"only {len(shared)}/{len(g0.connections)} shared connections - num_hidden > 0?"
+    assert g0.distance(g1, config.genome_config) < 1.0, "initial genomes are too distant"

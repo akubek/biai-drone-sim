@@ -69,6 +69,15 @@ def parse_and_run() -> None:
         help="Population size for training in 'train-*' modes."
     )
 
+    parser.add_argument(
+        "--net-type",
+        type=str,
+        choices=["feedforward", "recurrent"],
+        default="feedforward",
+        help="Network type. Sets the feed_forward parameter in the NEAT configuration "
+            "(overrides the value from the conf/ file)."
+    )
+
     args = parser.parse_args()
 
     # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
@@ -85,6 +94,7 @@ def parse_and_run() -> None:
     random.seed(seed)
     exp_config["seed"] = seed
     print(f"SEED: {seed}")
+    exp_config["net_type"] = args.net_type
 
     # --- Determine the path to the config file (according to the new structure) ---
     local_dir = os.path.dirname(__file__)
