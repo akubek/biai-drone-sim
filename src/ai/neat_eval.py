@@ -586,7 +586,12 @@ def run_neat_visual(
         use_cascade=use_cascade,
     )
 
-    reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
+    reporter = CSVTrainingReporter(
+        global_state,
+        folder=str(run_dir),
+        filename="evolution_log.csv",
+        run_id=run_dir.name
+    )
     population.add_reporter(reporter)
 
 
@@ -631,7 +636,12 @@ def run_neat_headless(
         net_type=exp_config.get("net_type", "feedforward"),
     )
 
-    reporter = CSVTrainingReporter(global_state,folder=str(run_dir), filename="evolution_log.csv")
+    reporter = CSVTrainingReporter(
+        global_state,
+        folder=str(run_dir),
+        filename="evolution_log.csv",
+        run_id=run_dir.name
+    )
     population.add_reporter(reporter)
 
     # Use all available CPU cores, leaving 1 free

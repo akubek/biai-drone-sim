@@ -7,7 +7,7 @@ class TrainingState:
     def __init__(self, exp_config: dict | None = None):
         if exp_config is None:
             exp_config = {}
-
+        self.exp_config = exp_config
         # 0=Pure NEAT, 1=Linear Expert, 2=Blind Curriculum, 3=Full Curriculum
         self.mode = exp_config.get("training_mode", 0)
 

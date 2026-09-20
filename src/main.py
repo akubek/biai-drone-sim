@@ -89,6 +89,7 @@ def parse_and_run() -> None:
         print(f"ERROR: Experiment configuration file not found: {config_json_path}")
         sys.exit(1)
 
+    exp_config["arch"] = args.arch
     #set rng seed from argument or generate a random one if not provided
     seed = args.seed if args.seed is not None else random.randrange(2**31)
     random.seed(seed)
