@@ -1,9 +1,12 @@
+from typing import Any, cast
+
 import neat
 
 from src.ai.state import TrainingState
 from src.config.config import *
 from src.core.environment import generate_start_and_target
 from src.core.map_generator import generate_grid_obstacles
+from src.core.stats import EpisodeResult
 
 
 class CurriculumParallelEvaluator(neat.ParallelEvaluator):
@@ -34,8 +37,17 @@ class CurriculumParallelEvaluator(neat.ParallelEvaluator):
             (rect.x, rect.y, rect.width, rect.height) for rect in obstacles
         ]
         
-        # 3. Odpalamy oryginalne, wieloprocesowe ocenianie genomów
-        super().evaluate(genomes, config)
+        jobs = [
+            self.pool.apply_async(self.eval_function, (genome, config))
+            for _, genome in genomes
+        ]
         
-        # 4. Zwiększamy licznik generacji po zakończeniu obliczeń
+        metrics: dict[int, EpisodeResult] = {}
+        for job, (genome_id, genome) in zip(jobs, genomes):
+            fitness, result = job.get(timeout=self.timeout)
+            cast(Any, genome).fitness = fitness
+            metrics[genome_id] = result
+
+        self.state.last_metrics = metrics
+        print(f"metryk: {len(metrics)}, genomow: {len(genomes)}") #TODO temporary
         self.state.generation += 1

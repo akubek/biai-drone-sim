@@ -1,5 +1,8 @@
+from src.core.stats import EpisodeResult
+
+
 class TrainingState:
-    """Centralne źródło prawdy o stanie i trybie treningu."""
+    """Central source of truth about the training state and mode."""
     
     def __init__(self, exp_config: dict | None = None):
         if exp_config is None:
@@ -8,28 +11,29 @@ class TrainingState:
         # 0=Pure NEAT, 1=Linear Expert, 2=Blind Curriculum, 3=Full Curriculum
         self.mode = exp_config.get("training_mode", 0)
 
-        # Pobieranie hiperparametrów
+        # Retrieving hyperparameters
         self.max_help_gens = exp_config.get("max_help_gens", 100)
         self.target_obstacles = exp_config.get("target_obstacles", 5)
         self.start_weight = exp_config.get("start_weight", 0.85)
 
-        # Zmienne śledzące postęp
+        # Variables tracking progress
         self.generation = 0
         self.current_stage = 1
         self.last_success_rate = 0.0
 
-        # Wartości robocze (zostaną nadpisane za chwilę)
+        # Working values (will be overwritten shortly)
         self.current_help_weight = 0.0
         self.num_obstacles = 0
 
-        # Od razu inicjalizujemy parametry dla 0. generacji
+        self.last_metrics: dict[int, EpisodeResult] = {}
+        # Immediately initialize parameters for the 0th generation
         self.update_parameters()
 
     def update_parameters(self):
-        """Oblicza parametry na podstawie wybranego trybu (0-3), etapu i generacji."""
+        """Calculates parameters based on the selected mode (0-3), stage, and generation."""
 
         # ==========================================
-        # 1. TRUDNOŚĆ MAPY (Przeszkody)
+        # 1. MAP DIFFICULTY (Obstacles)
         # ==========================================
         if self.mode in [2, 3]:  # Tryby korzystające z etapów (Curriculum)
             if self.current_stage == 1:
@@ -44,7 +48,7 @@ class TrainingState:
             self.num_obstacles = self.target_obstacles
 
         # ==========================================
-        # 2. POMOC EKSPERTA (Action Blending)
+        # 2. EXPERT HELP (Action Blending)
         # ==========================================
         if self.mode in [0, 2]:
             # Tryby bez eksperta

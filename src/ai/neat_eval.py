@@ -2,11 +2,13 @@ import math
 import multiprocessing
 import pickle
 import sys
+from collections import Counter
 from pathlib import Path
-from typing import Any, Counter, cast
+from typing import Any
 
 import neat
 import pygame
+from matplotlib.pylab import cast
 from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
@@ -330,7 +332,7 @@ def step_training_drone(
     )
 
 
-def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> float:
+def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tuple[float, EpisodeResult]:
     """Single simulation of one drone for a single CPU core."""
     expert = HardcodedBrain()
 
@@ -384,7 +386,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> fl
         max_episode_time_s=SIMULATION_TIME
     )
 
-    return cast(Any, genome).fitness
+    return cast(Any, genome).fitness, result
 
 
 def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config) -> None:
@@ -411,6 +413,8 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         # ("Round 2: Standard", 3),
         # ("Round 3: Obstacle Course", 4),
     ]
+
+    episode_results: dict[int, EpisodeResult] = {}
 
     total_population = len(genomes)
     
@@ -449,7 +453,6 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         dt = 1.0 / FPS
         current_frame = 0
         max_best_fitness = 0.0
-        episode_results: dict[int, EpisodeResult] = {}
 
         while current_frame < max_frames and drones:
             current_frame += 1
@@ -546,6 +549,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
     for genome_id, genome in genomes:
         cast(Any, genome).fitness /= num_rounds
 
+    global_state.last_metrics = episode_results
     global_state.generation += 1
 
 
