@@ -1,6 +1,7 @@
 import math
 import multiprocessing
 import pickle
+import statistics
 import sys
 from collections import Counter
 from pathlib import Path
@@ -19,7 +20,7 @@ from src.config.evolution import *
 from src.config.physics import *
 from src.config.rewards import *
 from src.core.drone import Drone
-from src.core.environment import generate_start_and_target
+from src.core.environment import Scenario, generate_scenarios, generate_start_and_target
 from src.core.flight_controller import FlightController
 from src.core.map_generator import generate_grid_obstacles
 from src.core.stats import EndReason, EpisodeResult, EvolutionStats
@@ -331,119 +332,89 @@ def step_training_drone(
         PPM=PPM
     )
 
+def _run_episode(
+    genome: neat.DefaultGenome,
+    config: neat.Config,
+    scenario: Scenario,
+    expert: HardcodedBrain,
+    help_weight: float,
+) -> EpisodeResult:
+    """One flight of a single drone on a single scenario."""
+    # Network is rebuilt for each scenario - RecurrentNetwork keeps
+    # state between activate() calls, otherwise map N+1 would start
+    # with the memory from map N.
+    net, drone, stats = _prepare_drone_and_stats(
+        genome, config, scenario.start_px, scenario.target_px, PPM
+    )
+
+    obstacles = scenario.rects()
+    target_m = scenario.target_m(PPM)
+    dt = 1.0 / FPS
+    max_frames = FPS * SIMULATION_TIME
+    use_cascade = cast(Any, config).use_cascade
+
+    reason: EndReason | None = None
+    for _ in range(max_frames):
+        reason = step_training_drone(
+            dt=dt, drone=drone, target_m=target_m, stats=stats,
+            genome=genome, net=net, expert=expert,
+            help_weight=help_weight, obstacles=obstacles,
+            use_cascade=use_cascade,
+        )
+        if reason is not None:
+            break
+
+    if reason is None:
+        reason = EndReason.TIMEOUT
+
+    return EpisodeResult.from_stats(
+        stats, cast(Any, genome).fitness, reason, SIMULATION_TIME
+    )
 
 def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tuple[float, EpisodeResult]:
     """Single simulation of one drone for a single CPU core."""
     expert = HardcodedBrain()
-
     help_weight = getattr(config, 'current_help_weight', 0.0)
+    scenarios: list[Scenario] = getattr(config, "shared_scenarios", [] )
 
-    start_px = getattr(config, 'shared_start_px', (0, 0))
-    target_px = getattr(config, 'shared_target_px', (0, 0))
-    target_m = (target_px[0] / PPM, target_px[1] / PPM)
-    shared_obstacles_data = getattr(config, 'shared_obstacles_data', [])
-    obstacles = [
-        pygame.Rect(x, y, w, h) for x, y, w, h in shared_obstacles_data
+    result = [
+        _run_episode(genome, config, sc, expert, help_weight)
+        for sc in scenarios
     ]
-
-    net, drone, stats = _prepare_drone_and_stats(genome, config, start_px, target_px, PPM)
-
-    max_frames = FPS * SIMULATION_TIME
-    dt = 1.0 / FPS
-    current_frame = 0
-    use_cascade = cast(Any, config).use_cascade
-
-    end_reason: EndReason | None = None
-
-    while current_frame < max_frames:
-        current_frame += 1
-        
-        end_reason = step_training_drone(
-            dt=dt,
-            drone=drone,
-            target_m=target_m,
-            stats=stats,
-            genome=genome,
-            net=net,
-            expert=expert,
-            help_weight=help_weight,
-            obstacles=obstacles,
-            use_cascade=use_cascade,
-        )
-
-        if end_reason is not None:
-            break
-
-    #reached end with no success -> timeout
-    if end_reason is None:
-        end_reason = EndReason.TIMEOUT
-
-    # save the success state in the genome for later analysis
-    result = EpisodeResult.from_stats(
-        stats=stats,
-        fitness=cast(Any, genome).fitness,
-        reason=end_reason,
-        max_episode_time_s=SIMULATION_TIME
-    )
 
     return cast(Any, genome).fitness, result
 
 
 def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config) -> None:
-    global render_graphics
-    global target_fps
-    global uncapped
-    global font
+    global render_graphics, target_fps, uncapped, font
 
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
-
     expert = HardcodedBrain()
 
     global_state.update_parameters()
 
-    # TODO: Consider expert behavior and fitness evaluation after moving to more challenging scenarios
+    scenarios = generate_scenarios(
+        count=global_state.scenarios_per_genome,
+        num_obstacles=global_state.num_obstacles,
+    )
 
-    for genome_id, genome in genomes:
-        cast(Any, genome).fitness = FIT_START_CAPITAL
-
-    # 2. Definiujemy nasze 3 rundy (Test Suite)
-    scenarios: list[tuple[str, int]] = [
-        ("Round 1: Open Sky", 0),
-        # ("Round 2: Standard", 3),
-        # ("Round 3: Obstacle Course", 4),
-    ]
-
-    episode_results: dict[int, EpisodeResult] = {}
-
+    episode_results: dict[int, list[EpisodeResult]] = {g.key: [] for _, g in genomes}
     total_population = len(genomes)
     
-    for round_name, num_obs in scenarios:
-        saved_fitness = {genome_id: cast(Any, g).fitness for genome_id, g in genomes}
+    for scenario in scenarios:
         nets: list[Any] = []
         ge: list[neat.DefaultGenome] = []
         drones: list[Drone] = []
         stats_list: list[EvolutionStats] = []
 
-        # 'expert' drone that already knows how to fly
-        # Setup środowiska
-        start_px, target_px = generate_start_and_target(
-            SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
-        )
-        target_m: tuple[float, float] = (target_px[0] / PPM, target_px[1] / PPM)
-        obstacles = generate_grid_obstacles(
-            SCREEN_WIDTH, SCREEN_HEIGHT,
-            start_px, target_px,
-            GRID_SIZE_M, global_state.num_obstacles,
-            PPM
-        )
+        target_m = scenario.target_m(PPM)
+        obstacles = scenario.rects()
 
         for _, genome in genomes:
             net, new_drone, new_stats = _prepare_drone_and_stats(
-                genome, config, start_px, target_px, PPM
+                genome, config, scenario.start_px, scenario.target_px, PPM
             )
-
-            # 4. Dodawanie do list (kolejność musi być identyczna we wszystkich listach!)
             nets.append(net)
             drones.append(new_drone)
             stats_list.append(new_stats)
@@ -458,13 +429,12 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
             current_frame += 1
             current_time_sec = current_frame * dt
 
-            # 1. ZARZĄDZANIE CZASEM
             if not uncapped:
                 clock.tick(target_fps)
             else:
-                clock.tick() # Odpychanie okna, brak limitu
+                clock.tick()
                 
-            # 2. OBSŁUGA ZDARZEŃ (W locie)
+            # 2. OBSŁUGA ZDARZEŃ
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     sys.exit()
@@ -478,7 +448,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     if event.key == pygame.K_2:  # Normalnie
                         target_fps = 60
 
-            # 3. CZYSTA LOGIKA (Dla każdego drona)
+            # 3. Logika drona
             to_remove = []
             for i, drone in enumerate(drones):
                 end_reason = step_training_drone(
@@ -498,22 +468,22 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                 )
 
                 if end_reason is not None:
-                    episode_results[ge[i]] = EpisodeResult.from_stats(
+                    episode_results[ge[i].key].append(EpisodeResult.from_stats(
                         stats=stats_list[i],
                         fitness=cast(Any, ge[i]).fitness,
                         reason=end_reason,
                         max_episode_time_s=SIMULATION_TIME
-                    )
+                    ))
                     to_remove.append(i)
 
             for index in reversed(to_remove):
                 _remove_drone(index, drones, stats_list, nets, ge)
 
-            # 4. RENDEROWANIE ODPINANE
+            # 4. Conditional rendering
             if render_graphics:
                 current_best_fitness = max([cast(Any, g).fitness for g in ge]) if ge else 0.0
                 max_best_fitness = max(max_best_fitness, current_best_fitness)
-                render_simulation(screen, drones, target_px, obstacles, PPM)
+                render_simulation(screen, drones, scenario.target_px, obstacles, PPM)
                 render_neat_hud(
                     screen=screen,
                     font=font,
@@ -525,29 +495,26 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                 )
                 pygame.display.flip()
 
+        # timeout drones that lived for the whole simulation, but did not reach the target
         for i in range(len(drones)):
-            episode_results[ge[i].key] = EpisodeResult.from_stats(
+            episode_results[ge[i].key].append(EpisodeResult.from_stats(
                 stats=stats_list[i],
                 fitness=cast(Any, ge[i]).fitness,
                 reason=EndReason.TIMEOUT,
                 max_episode_time_s=SIMULATION_TIME,
-            )
-        # Koniec rundy! Dodajemy wynik z tej rundy do tego, co zapisaliśmy wcześniej
-        # todo - ewentualnie naliczyć premie za trudność - mnożnik na podstawie eksperta albo inny
-        for genome_id, genome in genomes:
-            genome_any = cast(Any, genome)
-            round_score = genome_any.fitness
-            # Łączymy "bank" z poprzednich rund z tym, co ugrał w tej
-            genome_any.fitness = saved_fitness[genome_id] + round_score
+            ))
 
-    counts = Counter(r.end_reason.value for r in episode_results.values())
-    total = sum(counts.values())
-    print(f"gen {global_state.generation}: {dict(counts)} | suma {total}/{total_population}")
+    # Fitness = average from K scenarios
+    for _, genome in genomes:
+        results = episode_results[genome.key]
+        if not results:
+            raise RuntimeError(f"genome {genome.key}: no episodes - check keys in episode_results")
+        cast(Any, genome).fitness = statistics.fmean(r.fitness for r in results)
 
-    # po wszystkich rundach całkowity fitness
-    num_rounds = len(scenarios)
-    for genome_id, genome in genomes:
-        cast(Any, genome).fitness /= num_rounds
+    all_results = [r for rs in episode_results.values() for r in rs]
+    counts = Counter(r.end_reason.value for r in all_results)
+    expected = total_population * len(scenarios)
+    print(f"gen {global_state.generation}: {dict(counts)} | sum {len(all_results)}/{expected}")
 
     global_state.last_metrics = episode_results
     global_state.generation += 1

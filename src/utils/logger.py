@@ -10,7 +10,7 @@ from src.core.stats import EndReason, EpisodeResult
 
 HEADERS = [
     "run_id", "seed", "arch", "net_type", "training_mode",
-    "generation", "evaluations_total", "wall_time_s",
+    "generation", "evaluations_total", "scenarios_per_genome", "episodes_this_gen",  "wall_time_s",
     "stage", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
     "success_rate",
@@ -52,18 +52,20 @@ class CSVTrainingReporter(BaseReporter):
         self._gen_start = time.time()
 
     def post_evaluate(self, config, population, species, best_genome) -> None:
-        results = _flatten(self.state.last_metrics)
-        if not results:
+        episodes = _flatten(self.state.last_metrics)
+        if not episodes:
             return
 
-        self.evaluations_total += len(results)
-        n = len(results)
+        self.evaluations_total += len(episodes)
+        
+        fitnesses = [g.fitness for g in population.values() if g.fitness is not None]
+
+        n = len(episodes)
 
         def rate(reason: EndReason) -> float:
-            return sum(1 for r in results if r.end_reason is reason) / n
+            return sum(1 for r in episodes if r.end_reason is reason) / n
+        successes = [r for r in episodes if r.success]
 
-        fitnesses = [r.fitness for r in results]
-        successes = [r for r in results if r.success]
         exp = self.state.exp_config if hasattr(self.state, "exp_config") else {}
 
         row = [
@@ -75,6 +77,8 @@ class CSVTrainingReporter(BaseReporter):
 
             self._generation,
             self.evaluations_total,
+            self.state.scenarios_per_genome,
+            len(episodes),    
             round(time.time() - self._gen_start, 2),
 
             getattr(self.state, "current_stage", ""),
@@ -95,8 +99,8 @@ class CSVTrainingReporter(BaseReporter):
             round(rate(EndReason.TIMEOUT), 4),
 
             round(statistics.fmean([r.time_alive_s for r in successes]), 3) if successes else "",
-            round(statistics.fmean([r.energy for r in results]), 4),
-            round(statistics.fmean([r.min_dist_ratio for r in results]), 4),
+            round(statistics.fmean([r.energy for r in episodes]), 4),
+            round(statistics.fmean([r.min_dist_ratio for r in episodes]), 4),
 
             len(species.species) if species else 0,
             len(best_genome.nodes) if best_genome else 0,

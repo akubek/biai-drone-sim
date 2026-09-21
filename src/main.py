@@ -78,6 +78,9 @@ def parse_and_run() -> None:
             "(overrides the value from the conf/ file)."
     )
 
+    parser.add_argument("--scenarios", type=int, default=None,
+                    help="Number of scenarios (maps) per genome in each generation.")
+
     args = parser.parse_args()
 
     # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
@@ -112,6 +115,8 @@ def parse_and_run() -> None:
 
     if args.generations is not None:
         exp_config["generations"] = args.generations
+    if args.scenarios is not None:
+        exp_config["scenarios_per_genome"] = args.scenarios
     if args.pop_size is not None:
         exp_config["pop_size"] = args.pop_size
 

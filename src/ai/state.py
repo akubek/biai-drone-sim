@@ -15,6 +15,7 @@ class TrainingState:
         self.max_help_gens = exp_config.get("max_help_gens", 100)
         self.target_obstacles = exp_config.get("target_obstacles", 5)
         self.start_weight = exp_config.get("start_weight", 0.85)
+        self.scenarios_per_genome = exp_config.get("scenarios_per_genome", 3)
 
         # Variables tracking progress
         self.generation = 0
