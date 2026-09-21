@@ -1,14 +1,11 @@
-# --- KAPITAŁ STARTOWY ---
-FIT_START_CAPITAL = 0.0
-MIN_FITNESS = 0.1
-
-# --- KARY (Punktowe) ---
-FIT_CRASH_BASE_PENALTY = 5.0   # Płaska kara za uderzenie w przeszkodę
-FIT_KAMIKAZE_PENALTY = 15.0     # Dodatkowa kara za uderzenie bez hamowania
-#FIT_EXPERT_PENALTY_MULT = 10.0  # Kara za ignorowanie eksperta (Imitation Learning)
-
-# --- NAGRODY I BONUSY ---
-FIT_DISCOVERY_BONUS = 100.0      # Jednorazowa nagroda za dotknięcie celu
-FIT_EXPLORATION_MULT = 25.0     # Mnożnik za bicie rekordów dystansu (ok. 60 pkt za mapę)
-FIT_HOVER_REWARD = 250.0        # Nagroda za utrzymanie się w strefie celu [pkt/sek]
-FIT_HOVER_SUCCESS_REWARD = 1000.0 # Płaska nagroda za ukończenie zadania
+# --- WAGI SKLADNIKOW FITNESSU ---
+# Wszystkie skladniki sa bezwymiarowe (ulamki), wiec te liczby to jawne wagi
+# i mozna je porownywac miedzy soba. Zakres calosci: ok. -0.6 .. 4.5,
+# niezaleznie od mapy, dystansu startowego i etapu trudnosci.
+FIT_W_PROGRESS = 1.0      # za zamkniety ulamek dystansu do celu
+FIT_W_DISCOVERY = 0.5     # jednorazowo za dotkniecie strefy celu
+FIT_W_HOVER = 1.0         # za ulamek wymaganego czasu zawisu
+FIT_W_SUCCESS = 2.0       # za ukonczenie zadania
+FIT_W_CRASH = 0.3         # kara za kolizje
+FIT_W_KAMIKAZE = 0.3      # dodatkowa kara za uderzenie z predkoscia
+FIT_W_ENERGY = 0.0        # wlaczane w #21

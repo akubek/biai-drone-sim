@@ -146,7 +146,29 @@ def test_normal_flight_returns_none():
     assert check_termination(drone, stats, (3.0, 1.8), 1 / 60, []) is None
 
 def test_crash_scores_lower_than_success():
-    stats = EvolutionStats(initial_dist_m=3.0, min_dist_m=0.1, progress_raw=80.0,
-                           hover_raw=3000.0, has_touched_target=True)
+    stats = EvolutionStats(initial_dist_m=3.0, min_dist_m=0.1,
+                           max_hover_time_achieved=1.5, has_touched_target=True)
     assert (compute_fitness(stats, EndReason.SUCCESS).total
             > compute_fitness(stats, EndReason.CRASH).total)
+
+def test_progress_is_scale_free():
+    """The same fraction of the closed distance = the same result, regardless of the map scale."""
+    blisko = EvolutionStats(initial_dist_m=1.0, min_dist_m=0.5)
+    daleko = EvolutionStats(initial_dist_m=4.0, min_dist_m=2.0)
+    assert (compute_fitness(blisko, EndReason.TIMEOUT).progress
+            == compute_fitness(daleko, EndReason.TIMEOUT).progress)
+
+def test_fast_pass_through_target_is_not_hover():
+    """Flying through the target zone at high speed should not accumulate hover time."""
+    drone = Drone(2.5, 1.8)
+    drone._vel_x = 2.0                      # duzo powyzej progu
+    stats = EvolutionStats(initial_dist_m=1.0, min_dist_m=1.0,
+                           last_stagnation_dist_m=1.0,
+                           max_allowed_escape_dist_m=10.0)
+
+    for _ in range(120):                    # 2 s w strefie celu
+        check_termination(drone, stats, (2.5, 1.8), 1 / 60, [])
+        drone._vel_x = 2.0                  # utrzymuj predkosc
+
+    assert stats.hover_time == 0.0
+    assert stats.has_touched_target is True

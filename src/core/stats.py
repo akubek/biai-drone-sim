@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
 
-from src.config.rewards import MIN_FITNESS
-
 
 class EndReason(str, Enum):
     """Reason for the end of the episode. Exclusive - exactly one per flight."""
@@ -26,16 +24,10 @@ class FitnessComponents:
     shaping: float = 0.0              # wchodzi w #29
 
     @property
-    def raw_total(self) -> float:
+    def total(self) -> float:
         return (self.progress + self.discovery + self.hover + self.success
                 + self.crash_penalty + self.kamikaze_penalty
                 + self.energy_penalty + self.shaping)
-
-    @property
-    def total(self) -> float:
-        # TODO: NEAT nie radzi sobie dobrze z ujemnym fitnessem. Klamp zniknie w #19,
-        # gdy skladniki beda znormalizowane.
-        return max(MIN_FITNESS, self.raw_total)
 
 @dataclass
 class EpisodeResult:
@@ -82,8 +74,6 @@ class EvolutionStats:
     energy_raw: float = 0.0
     max_hover_time_achieved: float = 0.0
     has_touched_target: bool = False
-    progress_raw: float = 0.0
-    hover_raw: float = 0.0
     crash_speed: float = 0.0
 
     spinout_time: float = 0.0

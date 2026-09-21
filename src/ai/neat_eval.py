@@ -185,12 +185,7 @@ def check_termination(
     else:
         stats.spinout_time = 0
 
-    # progress - integral of trajectory towards the target (more points for being closer to the target)
-    if dist_m < stats.min_dist_m:
-        improvement = stats.min_dist_m - dist_m
-        stats.min_dist_m = dist_m
-        dist_multiplier = 1.0 + (2.0 / (1.0 + dist_m))
-        stats.progress_raw += improvement * FIT_EXPLORATION_MULT * dist_multiplier
+    stats.min_dist_m = min(stats.min_dist_m, dist_m)
     
     # stagnation check
     if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
@@ -208,17 +203,21 @@ def check_termination(
     if dist_m < (TARGET_SIZE_PX / PPM):
         stats.time_without_progress = 0  # reset stagnation time
         stats.has_touched_target = True
-        stats.hover_time += dt
 
-        # hover time check, only award for better hover time
-        if stats.hover_time > stats.max_hover_time_achieved:
-            new_time = stats.hover_time - stats.max_hover_time_achieved
-            stats.hover_raw += new_time * FIT_HOVER_REWARD * (1 + stats.hover_time * 10)
-            stats.max_hover_time_achieved = stats.hover_time
+        speed = math.hypot(drone._vel_x, drone._vel_y)
+        is_stable = (speed <= HOVER_MAX_SPEED_M_S
+                     and abs(drone._angular_vel) <= HOVER_MAX_ANGULAR_VEL)
 
-        # hover success check
-        if stats.hover_time >= HOVER_REQUIRED_SEC:
-            return EndReason.SUCCESS
+        if is_stable:
+            stats.hover_time += dt
+            stats.max_hover_time_achieved = max(stats.max_hover_time_achieved, stats.hover_time)
+
+            # hover success check
+            if stats.hover_time >= HOVER_REQUIRED_SEC:
+                return EndReason.SUCCESS
+        # reset hover time if not stable
+        else:
+            stats.hover_time = 0
     # reset hover time if not at target
     else:
         stats.hover_time = 0
