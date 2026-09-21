@@ -14,15 +14,15 @@ from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
+from src.ai.holdout import HoldoutReporter
 from src.ai.state import TrainingState
 from src.config.config import *
 from src.config.evolution import *
 from src.config.physics import *
 from src.config.rewards import *
 from src.core.drone import Drone
-from src.core.environment import Scenario, generate_scenarios, generate_start_and_target
+from src.core.environment import Scenario, generate_scenarios, load_holdout
 from src.core.flight_controller import FlightController
-from src.core.map_generator import generate_grid_obstacles
 from src.core.stats import EndReason, EpisodeResult, EvolutionStats
 from src.utils.logger import CSVTrainingReporter
 from src.utils.renderer import render_neat_hud, render_simulation
@@ -544,7 +544,7 @@ def run_neat_visual(
     run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
     print(f"RUN DIR: {run_dir}")
 
-    population, _ = _setup_population(
+    population, config = _setup_population(
         config_path,
         checkpoint,
         pop_size=exp_config.get("pop_size"),
@@ -553,14 +553,23 @@ def run_neat_visual(
         use_cascade=use_cascade,
     )
 
+    holdout = HoldoutReporter(
+        scenarios=load_holdout(),
+        run_episode_fn=_run_episode,
+        config=config,
+        folder=str(run_dir),
+        every=10,
+    )
+    population.add_reporter(holdout)
+    
     reporter = CSVTrainingReporter(
         global_state,
         folder=str(run_dir),
         filename="evolution_log.csv",
         run_id=run_dir.name
     )
+    reporter.holdout = holdout
     population.add_reporter(reporter)
-
 
     print("Starting evolution in VISUAL mode...")
     
@@ -594,7 +603,7 @@ def run_neat_headless(
     run_dir = create_run_dir("cascade" if use_cascade else "e2e", exp_config, config_path)
     print(f"RUN DIR: {run_dir}")
     
-    population, _ = _setup_population(
+    population, config = _setup_population(
         config_path,
         checkpoint,
         pop_size=exp_config.get("pop_size"),
@@ -603,12 +612,22 @@ def run_neat_headless(
         net_type=exp_config.get("net_type", "feedforward"),
     )
 
+    holdout = HoldoutReporter(
+        scenarios=load_holdout(),
+        run_episode_fn=_run_episode,
+        config=config,
+        folder=str(run_dir),
+        every=10,
+    )
+    population.add_reporter(holdout)
+
     reporter = CSVTrainingReporter(
         global_state,
         folder=str(run_dir),
         filename="evolution_log.csv",
         run_id=run_dir.name
     )
+    reporter.holdout = holdout
     population.add_reporter(reporter)
 
     # Use all available CPU cores, leaving 1 free

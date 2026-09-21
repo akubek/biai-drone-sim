@@ -13,7 +13,7 @@ HEADERS = [
     "generation", "evaluations_total", "scenarios_per_genome", "episodes_this_gen",  "wall_time_s",
     "stage", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
-    "success_rate",
+    "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_min_dist_ratio",
     "species_count", "best_nodes", "best_conns",
@@ -54,10 +54,11 @@ class CSVTrainingReporter(BaseReporter):
     def post_evaluate(self, config, population, species, best_genome) -> None:
         episodes = _flatten(self.state.last_metrics)
         if not episodes:
+            print("No episodes to log! Skipping CSV entry.")
             return
 
         self.evaluations_total += len(episodes)
-        
+
         fitnesses = [g.fitness for g in population.values() if g.fitness is not None]
 
         n = len(episodes)
@@ -66,46 +67,50 @@ class CSVTrainingReporter(BaseReporter):
             return sum(1 for r in episodes if r.end_reason is reason) / n
         successes = [r for r in episodes if r.success]
 
-        exp = self.state.exp_config if hasattr(self.state, "exp_config") else {}
+        exp = getattr(self.state, "exp_config", {})
 
         row = [
-            self.run_id,
-            exp.get("seed", ""),
-            exp.get("arch", ""),
-            exp.get("net_type", ""),
-            getattr(self.state, "mode", ""),
+            self.run_id,    #run_id
+            exp.get("seed", ""), #seed
+            exp.get("arch", ""), #arch
+            exp.get("net_type", ""), #net_type
+            getattr(self.state, "mode", ""), #training_mode
 
-            self._generation,
-            self.evaluations_total,
-            self.state.scenarios_per_genome,
-            len(episodes),    
-            round(time.time() - self._gen_start, 2),
+            self._generation, #generation
+            self.evaluations_total, #evaluations_total
+            self.state.scenarios_per_genome, #scenarios_per_genome
+            len(episodes),    #episodes_this_gen
+            round(time.time() - self._gen_start, 2), #wall_time_s
 
-            getattr(self.state, "current_stage", ""),
-            getattr(self.state, "num_obstacles", ""),
-            round(self.state.current_help_weight, 3),
+            getattr(self.state, "current_stage", ""), #stage
+            getattr(self.state, "num_obstacles", ""), #num_obstacles
+            round(self.state.current_help_weight, 3), #expert_weight
 
-            round(max(fitnesses), 4),
-            round(statistics.fmean(fitnesses), 4),
-            round(statistics.median(fitnesses), 4),
-            round(statistics.pstdev(fitnesses), 4) if n > 1 else 0.0,
+            round(max(fitnesses), 4), #best_fitness
+            round(statistics.fmean(fitnesses), 4), #mean_fitness
+            round(statistics.median(fitnesses), 4), #median_fitness
+            round(statistics.pstdev(fitnesses), 4) if len(fitnesses) > 1 else 0.0, #std_fitness
 
-            round(len(successes) / n, 4),
+            round(len(successes) / n, 4), #success_rate
+            getattr(getattr(self, "holdout", None), "last_overall_success", ""), #holdout_success_rate
 
-            round(rate(EndReason.CRASH), 4),
-            round(rate(EndReason.ESCAPE), 4),
-            round(rate(EndReason.SPINOUT), 4),
-            round(rate(EndReason.STAGNATION), 4),
-            round(rate(EndReason.TIMEOUT), 4),
+            round(rate(EndReason.CRASH), 4), #crash_rate
+            round(rate(EndReason.ESCAPE), 4), #escape_rate
+            round(rate(EndReason.SPINOUT), 4), #spinout_rate
+            round(rate(EndReason.STAGNATION), 4), #stagnation_rate
+            round(rate(EndReason.TIMEOUT), 4), #timeout_rate
 
-            round(statistics.fmean([r.time_alive_s for r in successes]), 3) if successes else "",
-            round(statistics.fmean([r.energy for r in episodes]), 4),
-            round(statistics.fmean([r.min_dist_ratio for r in episodes]), 4),
+            round(statistics.fmean([r.time_alive_s for r in successes]), 3) if successes else "", #mean_time_to_target
+            round(statistics.fmean([r.energy for r in episodes]), 4), #mean_energy
+            round(statistics.fmean([r.min_dist_ratio for r in episodes]), 4), #mean_min_dist_ratio
 
-            len(species.species) if species else 0,
-            len(best_genome.nodes) if best_genome else 0,
-            len(best_genome.connections) if best_genome else 0,
+            len(species.species) if species else 0, #species_count
+            len(best_genome.nodes) if best_genome else 0, #best_nodes
+            len(best_genome.connections) if best_genome else 0, #best_conns
         ]
+
+        assert len(row) == len(HEADERS), \
+            f"row has {len(row)} fields, HEADERS {len(HEADERS)} - columns are misaligned"
 
         with open(self.filename, mode="a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(row)

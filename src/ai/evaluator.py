@@ -4,8 +4,7 @@ import neat
 
 from src.ai.state import TrainingState
 from src.config.config import *
-from src.core.environment import generate_scenarios, generate_start_and_target
-from src.core.map_generator import generate_grid_obstacles
+from src.core.environment import generate_scenarios
 from src.core.stats import EpisodeResult
 
 
@@ -36,5 +35,4 @@ class CurriculumParallelEvaluator(neat.ParallelEvaluator):
             metrics[genome_id] = result
 
         self.state.last_metrics = metrics
-        print(f"metryk: {len(metrics)}, genomow: {len(genomes)}") #TODO temporary
         self.state.generation += 1

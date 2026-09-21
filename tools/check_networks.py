@@ -56,7 +56,7 @@ def _count_enabled(genome) -> int:
 
 
 def survey(config_path: str, net_factory, generations: int, seed: int) -> list[GenerationRow]:
-    """Uruchamia ewolucje i zbiera statystyki struktury sieci per generacja."""
+    """Runs the evolution and collects network structure statistics per generation."""
     random.seed(seed)
     config = neat.Config(
         neat.DefaultGenome, neat.DefaultReproduction,
@@ -89,7 +89,7 @@ def survey(config_path: str, net_factory, generations: int, seed: int) -> list[G
 
 def print_table(label: str, rows: list[GenerationRow], every: int = 5) -> None:
     print(f"\n=== {label} ===")
-    print(f"{'gen':>5} {'martwe':>14} {'niepelne':>10} {'poprawne':>10}")
+    print(f"{'gen':>5} {'dead':>14} {'partial':>10} {'correct':>10}")
     for row in rows:
         if row.generation % every == 0 or row is rows[-1]:
             print(f"{row.generation:>5} {row.dead:>6} ({row.dead_pct:4.0f}%) "
@@ -115,12 +115,12 @@ def write_csv(path: str, results: dict[str, list[GenerationRow]]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sprawdza rozjazd genom - fenotyp w NEAT.")
-    parser.add_argument("config", help="Sciezka do pliku conf/neat-*.txt")
+    parser = argparse.ArgumentParser(description="Checks the divergence of genomes - phenotype in NEAT.")
+    parser.add_argument("config", help="Path to the conf/neat-*.txt file")
     parser.add_argument("--generations", type=int, default=30)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--every", type=int, default=5, help="Co ktora generacje wypisac wiersz")
-    parser.add_argument("--csv", default=None, help="Opcjonalny plik wynikowy CSV")
+    parser.add_argument("--every", type=int, default=5, help="How often to print a row (every N generations)")
+    parser.add_argument("--csv", default=None, help="Optional output CSV file")
     args = parser.parse_args()
 
     variants = {

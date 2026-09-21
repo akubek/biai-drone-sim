@@ -1,7 +1,6 @@
 # --- ZASADY SYMULACJI (Early Stopping) ---
 import math
 
-
 SIMULATION_TIME = 15            # Max czas życia drona w sek. (jeśli nie utknie)
 HOVER_REQUIRED_SEC = 1.5        # Wymagany czas w celu by uznać zadanie za wykonane
 
