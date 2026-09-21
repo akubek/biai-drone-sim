@@ -28,6 +28,8 @@ from typing import Any, cast
 
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
+import itertools
+
 import neat
 
 from src.ai.expert import HardcodedBrain
@@ -103,7 +105,7 @@ def print_table(title: str, stats: list[TierStats]) -> None:
 def check_monotonic(stats: list[TierStats]) -> list[str]:
     """The expert's success rate should decrease, and the crash rate should increase with the tier."""
     problems = []
-    for prev, curr in zip(stats, stats[1:]):
+    for prev, curr in itertools.pairwise(stats):
         if curr.success_rate > prev.success_rate + 0.05:
             problems.append(
                 f"level {curr.tier} easier than {prev.tier} "
