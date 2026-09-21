@@ -14,6 +14,7 @@ from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
+from src.ai.fitness import compute_fitness
 from src.ai.holdout import HoldoutReporter
 from src.ai.state import TrainingState
 from src.config.config import *
@@ -118,10 +119,6 @@ def _prepare_drone_and_stats(
     PPM: float
 ) -> tuple[Any, Drone, EvolutionStats]:
     """Creates the network, the physical drone, and initializes statistics with limits."""
-    
-    # 1. Sieć NEAT
-    genome_any = cast(Any, genome)
-    genome_any.fitness = FIT_START_CAPITAL
 
     builder = NET_BUILDERS[cast(Any, config).net_type]
     net = builder(genome, config)
@@ -163,21 +160,18 @@ def _remove_drone(
     _ = ge.pop(index)
 
 
-def apply_fitness_rules(
+def check_termination(
         drone: Drone, 
-        stats: EvolutionStats, 
-        genome: Any, 
+        stats: EvolutionStats,
         target_m: tuple[float, float], 
         dt: float, 
         obstacles: list, 
         SCREEN_WIDTH: int = SCREEN_WIDTH,
         SCREEN_HEIGHT: int = SCREEN_HEIGHT,
         PPM: float = PPM
-
-        ) -> EndReason | None:
+    ) -> EndReason | None:
     """Calculates fitness and returns the reason for the end of the episode or none if the episode (flight) is still ongoing."""
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
-    genome_any = cast(Any, genome)
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
@@ -191,73 +185,45 @@ def apply_fitness_rules(
     else:
         stats.spinout_time = 0
 
-    # exploration bonus
+    # progress - integral of trajectory towards the target (more points for being closer to the target)
     if dist_m < stats.min_dist_m:
         improvement = stats.min_dist_m - dist_m
         stats.min_dist_m = dist_m
-        # around 1m from target multiplier starts raising noticeably
-
-        # the closer to the target the more points for progress
         dist_multiplier = 1.0 + (2.0 / (1.0 + dist_m))
-        genome_any.fitness += improvement * FIT_EXPLORATION_MULT * dist_multiplier
+        stats.progress_raw += improvement * FIT_EXPLORATION_MULT * dist_multiplier
     
-    #stagnation check
+    # stagnation check
     if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
         stats.time_without_progress = 0.0
         stats.last_stagnation_dist_m = dist_m
     else:
         stats.time_without_progress += dt
 
-    # ==========================================
-    # CHECK COLLISION
-    # ==========================================
+    # collision check
     if drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM):
-        
-        # 1. Obliczamy prędkość uderzenia
-        crash_speed = math.hypot(drone._vel_x, drone._vel_y)
-        
-        # 2. Płaska kara za sam fakt rozbicia (np. 10.0)
-        genome_any.fitness -= FIT_CRASH_BASE_PENALTY
-        
-        # 3. Dodatkowa kara za wlot w ścianę bez hamowania (np. 15.0)
-        if crash_speed > SAFE_CRASH_SPEED_M_S:
-            genome_any.fitness -= FIT_KAMIKAZE_PENALTY
-
-        genome_any.fitness = max(0.1, genome_any.fitness)
+        stats.crash_speed = math.hypot(drone._vel_x, drone._vel_y)
         return EndReason.CRASH
 
+    # target check
     if dist_m < (TARGET_SIZE_PX / PPM):
         stats.time_without_progress = 0  # reset stagnation time
-
-        # 1. JEDNORAZOWA NAGRODA ZA ZNALEZIENIE CELU
-        if not stats.has_touched_target:
-           stats.has_touched_target = True
-           genome_any.fitness += FIT_DISCOVERY_BONUS 
-
+        stats.has_touched_target = True
         stats.hover_time += dt
 
-        # 2. PUNKTOWANIE HOVEROWANIA 
+        # hover time check, only award for better hover time
         if stats.hover_time > stats.max_hover_time_achieved:
-            # Obliczamy tylko ten nowy, niepunktowany wcześniej ułamek sekundy
-            new_time_earned = stats.hover_time - stats.max_hover_time_achieved
-            
-            # Nagroda rośnie z czasem zawisu, ale tylko za "nowe" sekundy
-            genome_any.fitness += (
-                new_time_earned * FIT_HOVER_REWARD * (1 + stats.hover_time * 10)
-            )
-            # Aktualizujemy rekord życiowy drona
+            new_time = stats.hover_time - stats.max_hover_time_achieved
+            stats.hover_raw += new_time * FIT_HOVER_REWARD * (1 + stats.hover_time * 10)
             stats.max_hover_time_achieved = stats.hover_time
 
-        # 3. PEŁNY SUKCES (Ukończenie poziomu)
+        # hover success check
         if stats.hover_time >= HOVER_REQUIRED_SEC:
-            genome_any.fitness += FIT_HOVER_SUCCESS_REWARD
             return EndReason.SUCCESS
-
+    # reset hover time if not at target
     else:
         stats.hover_time = 0
 
-    genome_any.fitness = max(0.1, genome_any.fitness)
-    
+    # stagnation check
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:
         return EndReason.STAGNATION
 
@@ -320,10 +286,9 @@ def step_training_drone(
     stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
     stats.total_time_alive += dt
 
-    return apply_fitness_rules(
+    return check_termination(
         drone=drone,
         stats=stats,
-        genome=genome,
         target_m=target_m,
         dt=dt,
         obstacles=obstacles,
@@ -367,8 +332,14 @@ def _run_episode(
     if reason is None:
         reason = EndReason.TIMEOUT
 
+    components = compute_fitness(stats, reason)
+    cast(Any, genome).fitness = components.total
+
     return EpisodeResult.from_stats(
-        stats, cast(Any, genome).fitness, reason, SIMULATION_TIME
+        stats=stats,
+        components=components,
+        reason=reason,
+        max_episode_time_s=SIMULATION_TIME,
     )
 
 def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tuple[float, EpisodeResult]:
@@ -386,7 +357,7 @@ def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tu
 
 
 def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config) -> None:
-    global render_graphics, target_fps, uncapped, font
+    global render_graphics, target_fps, uncapped
 
     screen = pygame.display.get_surface()
     clock = pygame.time.Clock()
@@ -423,7 +394,6 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
         max_frames = FPS * SIMULATION_TIME
         dt = 1.0 / FPS
         current_frame = 0
-        max_best_fitness = 0.0
 
         while current_frame < max_frames and drones:
             current_frame += 1
@@ -468,9 +438,11 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                 )
 
                 if end_reason is not None:
+                    components = compute_fitness(stats_list[i], end_reason)
+                    cast(Any, ge[i]).fitness = components.total
                     episode_results[ge[i].key].append(EpisodeResult.from_stats(
                         stats=stats_list[i],
-                        fitness=cast(Any, ge[i]).fitness,
+                        components=components,
                         reason=end_reason,
                         max_episode_time_s=SIMULATION_TIME
                     ))
@@ -481,8 +453,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
             # 4. Conditional rendering
             if render_graphics:
-                current_best_fitness = max([cast(Any, g).fitness for g in ge]) if ge else 0.0
-                max_best_fitness = max(max_best_fitness, current_best_fitness)
+                closest_m = min((s.min_dist_m for s in stats_list), default=0.0)
                 render_simulation(screen, drones, scenario.target_px, obstacles, PPM)
                 render_neat_hud(
                     screen=screen,
@@ -490,16 +461,18 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
                     generation=global_state.generation,
                     alive_count=len(drones),
                     pop_size=total_population,
-                    best_fitness=max_best_fitness,
+                    best_fitness=closest_m, #TODO: zmienic w render neat hud na closest distance
                     current_time_sec=current_time_sec
                 )
                 pygame.display.flip()
 
         # timeout drones that lived for the whole simulation, but did not reach the target
         for i in range(len(drones)):
+            components = compute_fitness(stats_list[i], EndReason.TIMEOUT)
+            cast(Any, ge[i]).fitness = components.total
             episode_results[ge[i].key].append(EpisodeResult.from_stats(
                 stats=stats_list[i],
-                fitness=cast(Any, ge[i]).fitness,
+                components=components,
                 reason=EndReason.TIMEOUT,
                 max_episode_time_s=SIMULATION_TIME,
             ))

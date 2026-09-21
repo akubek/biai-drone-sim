@@ -1,5 +1,6 @@
 # --- KAPITAŁ STARTOWY ---
 FIT_START_CAPITAL = 0.0
+MIN_FITNESS = 0.1
 
 # --- KARY (Punktowe) ---
 FIT_CRASH_BASE_PENALTY = 5.0   # Płaska kara za uderzenie w przeszkodę

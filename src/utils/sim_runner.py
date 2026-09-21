@@ -1,25 +1,25 @@
-import os
-import sys
 import math
+import os
 import pickle
-import pygame
-from typing import cast, Any
-import neat
+from typing import Any, cast
 
+import neat
+import pygame
+
+from src.ai.expert import HardcodedBrain
+from src.ai.fitness import compute_fitness
+from src.ai.neat_eval import check_termination
+from src.config.config import *
+from src.config.evolution import *
+from src.config.rewards import *
 from src.core.drone import Drone
 from src.core.flight_controller import FlightController
-from src.ai.expert import HardcodedBrain
-from src.core.stats import EvolutionStats
-from src.core.environment import generate_start_and_target
 from src.core.map_generator import generate_grid_obstacles
+from src.core.stats import EndReason, EvolutionStats
 from src.utils.renderer import render_simulation
-from src.ai.neat_eval import apply_fitness_rules
-from src.config.config import *
-from src.config.rewards import *
-from src.config.evolution import *
 
 
-def reset_test_drone(target_m: tuple[float, float]) -> tuple[Drone, EvolutionStats, Any]:
+def reset_test_drone(target_m: tuple[float, float]) -> tuple[Drone, EvolutionStats]:
     """Pomocnicza funkcja do tworzenia świeżych obiektów po resecie."""
     start_x = (SCREEN_WIDTH // 2) / PPM
     start_y = (SCREEN_HEIGHT // 2) / PPM
@@ -37,17 +37,14 @@ def reset_test_drone(target_m: tuple[float, float]) -> tuple[Drone, EvolutionSta
         max_allowed_escape_dist_m=allowed_escape_dist
     )
 
-    class DummyGenome:
-        fitness = FIT_START_CAPITAL
-
-    return new_drone, new_stats, DummyGenome()
+    return new_drone, new_stats
 
 
 def test_best_drone(config_path: str, use_cascade: bool, genome_path: str = "best_drone.pkl") -> None:
-    """Wczytuje najlepszego drona z pliku i pozwala go przetestować."""
+    """Loads the best drone from a file and allows testing it."""
     
     if not os.path.exists(genome_path):
-        print(f"❌ BŁĄD: Nie znaleziono zapisanego modelu '{genome_path}'.")
+        print(f"ERROR: Could not find saved model '{genome_path}'.")
         return
 
     config = neat.Config(
@@ -58,7 +55,7 @@ def test_best_drone(config_path: str, use_cascade: bool, genome_path: str = "bes
     with open(genome_path, "rb") as f:
         winner_genome = pickle.load(f)
 
-    print("=== STRUKTURA NAJLEPSZEJ SIECI ===")
+    print("=== STRUCTURE OF THE BEST NETWORK ===")
     print(winner_genome)
     # Dedukcja trybu architektury z konfiguracji
     is_cascade = use_cascade
@@ -106,8 +103,8 @@ def test_best_drone(config_path: str, use_cascade: bool, genome_path: str = "bes
         is_crashed = drone.check_collision(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
 
         if is_crashed:
-            print("--- KONIEC PRÓBY: Kolizja ---")
-            drone, stats, genome = reset_test_drone(target_m)
+            print("--- END OF TEST: Collision ---")
+            drone, _ = reset_test_drone(target_m)
             continue
 
         render_simulation(screen, [drone], target_px, obstacles, PPM)
@@ -118,7 +115,7 @@ def test_best_drone(config_path: str, use_cascade: bool, genome_path: str = "bes
 
 
 def test_baseline() -> None:
-    """Testuje działanie HardcodedBrain (Eksperta)."""
+    """Tests the operation of the HardcodedBrain (Expert)."""
     pygame.init()
     pygame.font.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -137,7 +134,7 @@ def test_baseline() -> None:
     target_m = (target_px[0] / PPM, target_px[1] / PPM)
     obstacles = []
 
-    drone, stats, genome = reset_test_drone(target_m)
+    drone, stats = reset_test_drone(target_m)
 
     frames = 0
     max_frames = FPS * SIMULATION_TIME 
@@ -152,14 +149,11 @@ def test_baseline() -> None:
             if event.type == pygame.QUIT:
                 run = False
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                drone_pos_px = (int(drone._x * PPM), int(drone._y * PPM))
                 obstacles = generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT, start_pos_px, target_px, GRID_SIZE_M, 20, PPM)
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 target_px = pygame.mouse.get_pos()
                 target_m = (target_px[0] / PPM, target_px[1] / PPM)
-                # Szybki reset statystyk by Ekspert dostał poprawny cel
-                d_curr = math.hypot(target_m[0] - drone._x, target_m[1] - drone._y)
-                drone, stats, genome = reset_test_drone(target_m)
+                drone, stats = reset_test_drone(target_m)
 
         # 1. Sensory
         _ = drone.get_sensor_data(SCREEN_WIDTH, SCREEN_HEIGHT, obstacles, PPM)
@@ -178,10 +172,9 @@ def test_baseline() -> None:
         dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
 
         # Ewaluacja
-        success, should_stop = apply_fitness_rules(
+        reason = check_termination(
             drone=drone,
             stats=stats,
-            genome=genome,
             target_m=target_m,
             dt=dt,
             obstacles=obstacles,
@@ -190,18 +183,24 @@ def test_baseline() -> None:
             PPM=PPM
         )
 
-        if should_stop or success or frames >= max_frames:
-            status = "SUKCES" if success else "KOLIZJA/EWALUACJA" if should_stop else "TIMEOUT"
-            print(f"--- KONIEC PRÓBY: {status} | Czas: {current_time_sec:.1f}s | Punkty: {genome.fitness:.1f} ---")
+        if reason is None and frames >= max_frames:
+            reason = EndReason.TIMEOUT
 
-            drone, stats, genome = reset_test_drone(target_m)
+        if reason is not None:
+            c = compute_fitness(stats, reason)
+            print(f"--- END OF TEST: {reason.value:<10} | time {current_time_sec:4.1f}s "
+                  f"| fitness {c.total:8.1f}  "
+                  f"(progress {c.progress:6.1f}, hover {c.hover:7.1f}, "
+                  f"penalties {c.crash_penalty + c.kamikaze_penalty:6.1f})")
+
+            drone, stats = reset_test_drone(target_m)
             frames = 0
 
         # WIZUALIZACJA
         render_simulation(screen, [drone], target_px, obstacles, PPM)
 
-        txt_dist = font.render(f"Dystans: {dist_m:.2f} m", True, (0, 255, 255))
-        txt_time = font.render(f"Czas: {current_time_sec:.1f} s", True, (255, 255, 255))
+        txt_dist = font.render(f"Distance: {dist_m:.2f} m", True, (0, 255, 255))
+        txt_time = font.render(f"Time: {current_time_sec:.1f} s", True, (255, 255, 255))
         screen.blit(txt_dist, (10, 10))
         screen.blit(txt_time, (10, 40))
 

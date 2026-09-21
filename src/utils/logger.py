@@ -13,6 +13,9 @@ HEADERS = [
     "generation", "evaluations_total", "scenarios_per_genome", "episodes_this_gen",  "wall_time_s",
     "stage", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
+    "mean_progress", "mean_discovery", "mean_hover", "mean_success",
+    "mean_crash_penalty", "mean_kamikaze_penalty",
+    "mean_energy_penalty", "mean_shaping",
     "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_min_dist_ratio",
@@ -90,6 +93,15 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean(fitnesses), 4), #mean_fitness
             round(statistics.median(fitnesses), 4), #median_fitness
             round(statistics.pstdev(fitnesses), 4) if len(fitnesses) > 1 else 0.0, #std_fitness
+
+            round(statistics.fmean(r.components.progress for r in episodes), 3), #mean_progress
+            round(statistics.fmean(r.components.discovery for r in episodes), 3), #mean_discovery
+            round(statistics.fmean(r.components.hover for r in episodes), 3), #mean_hover
+            round(statistics.fmean(r.components.success for r in episodes), 3), #mean_success
+            round(statistics.fmean(r.components.crash_penalty for r in episodes), 3), #mean_crash_penalty
+            round(statistics.fmean(r.components.kamikaze_penalty for r in episodes), 3), #mean_kamikaze_penalty
+            round(statistics.fmean(r.components.energy_penalty for r in episodes), 3), #mean_energy_penalty
+            round(statistics.fmean(r.components.shaping for r in episodes), 3), #mean_shaping
 
             round(len(successes) / n, 4), #success_rate
             getattr(getattr(self, "holdout", None), "last_overall_success", ""), #holdout_success_rate

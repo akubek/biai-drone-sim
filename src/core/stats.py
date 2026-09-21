@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 
+from src.config.rewards import MIN_FITNESS
+
 
 class EndReason(str, Enum):
     """Reason for the end of the episode. Exclusive - exactly one per flight."""
@@ -11,12 +13,36 @@ class EndReason(str, Enum):
     STAGNATION = "stagnation"
     TIMEOUT = "timeout"
 
+@dataclass
+class FitnessComponents:
+    """Breakdown of fitness into components - for diagnostics and logging."""
+    progress: float = 0.0
+    discovery: float = 0.0
+    hover: float = 0.0
+    success: float = 0.0
+    crash_penalty: float = 0.0        # ujemny
+    kamikaze_penalty: float = 0.0     # ujemny
+    energy_penalty: float = 0.0       # ujemny, wlaczany w #21
+    shaping: float = 0.0              # wchodzi w #29
+
+    @property
+    def raw_total(self) -> float:
+        return (self.progress + self.discovery + self.hover + self.success
+                + self.crash_penalty + self.kamikaze_penalty
+                + self.energy_penalty + self.shaping)
+
+    @property
+    def total(self) -> float:
+        # TODO: NEAT nie radzi sobie dobrze z ujemnym fitnessem. Klamp zniknie w #19,
+        # gdy skladniki beda znormalizowane.
+        return max(MIN_FITNESS, self.raw_total)
 
 @dataclass
 class EpisodeResult:
     """Summary of a single flight of a single drone. Filled at the end of the episode."""
     end_reason: EndReason
     fitness: float
+    components: FitnessComponents
     time_alive_s: float
     min_dist_ratio: float
     max_hover_time_s: float
@@ -28,13 +54,14 @@ class EpisodeResult:
         return self.end_reason is EndReason.SUCCESS
 
     @classmethod
-    def from_stats(cls, stats: "EvolutionStats", fitness: float,
+    def from_stats(cls, stats: "EvolutionStats", components : FitnessComponents,
                     reason: EndReason, max_episode_time_s: float) -> "EpisodeResult":
         # Normalised energy: 1.0 = both engines at full power for the entire episode.
         max_energy = 2.0 * max_episode_time_s
         return cls(
             end_reason=reason,
-            fitness=fitness,
+            fitness=components.total,
+            components=components,
             time_alive_s=stats.total_time_alive,
             min_dist_ratio=stats.min_dist_m / stats.initial_dist_m if stats.initial_dist_m > 0 else 0.0,
             max_hover_time_s=stats.max_hover_time_achieved,
@@ -55,5 +82,8 @@ class EvolutionStats:
     energy_raw: float = 0.0
     max_hover_time_achieved: float = 0.0
     has_touched_target: bool = False
+    progress_raw: float = 0.0
+    hover_raw: float = 0.0
+    crash_speed: float = 0.0
 
     spinout_time: float = 0.0

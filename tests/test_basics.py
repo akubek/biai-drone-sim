@@ -3,7 +3,8 @@ import random
 import neat
 import pytest
 
-from src.ai.neat_eval import apply_fitness_rules
+from src.ai.fitness import compute_fitness
+from src.ai.neat_eval import check_termination
 from src.config.config import (
     GRID_SIZE_M,
     PPM,
@@ -130,10 +131,7 @@ def test_crash_returns_crash_reason():
                            last_stagnation_dist_m=2.0,
                            max_allowed_escape_dist_m=10.0)
 
-    class G:
-        fitness = 0.0
-
-    reason = apply_fitness_rules(drone, stats, G(), (2.0, 1.0), 1 / 60, [])
+    reason = check_termination(drone, stats, (2.0, 1.0), 1 / 60, [])
     assert reason is EndReason.CRASH
 
 
@@ -144,7 +142,11 @@ def test_normal_flight_returns_none():
                            last_stagnation_dist_m=1.0,
                            max_allowed_escape_dist_m=10.0)
 
-    class G:
-        fitness = 0.0
 
-    assert apply_fitness_rules(drone, stats, G(), (3.0, 1.8), 1 / 60, []) is None
+    assert check_termination(drone, stats, (3.0, 1.8), 1 / 60, []) is None
+
+def test_crash_scores_lower_than_success():
+    stats = EvolutionStats(initial_dist_m=3.0, min_dist_m=0.1, progress_raw=80.0,
+                           hover_raw=3000.0, has_touched_target=True)
+    assert (compute_fitness(stats, EndReason.SUCCESS).total
+            > compute_fitness(stats, EndReason.CRASH).total)
