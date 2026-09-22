@@ -23,12 +23,13 @@ class FitnessComponents:
     escape_penalty: float = 0.0       # ujemny
     energy_penalty: float = 0.0       # ujemny, wlaczany w #21
     shaping: float = 0.0              # wchodzi w #29
+    braking: float = 0.0
 
     @property
     def total(self) -> float:
         return (self.progress + self.discovery + self.hover + self.success
                 + self.crash_penalty + self.kamikaze_penalty
-                + self.escape_penalty + self.energy_penalty + self.shaping )
+                + self.escape_penalty + self.energy_penalty + self.shaping + self.braking)
 
 @dataclass
 class EpisodeResult:
@@ -45,6 +46,8 @@ class EpisodeResult:
     mean_angular_speed: float
     speed_at_min_dist: float
     ang_speed_at_min_dist: float
+    max_lin_credit: float
+    max_ang_credit: float
 
     @property
     def success(self) -> bool:
@@ -68,6 +71,8 @@ class EpisodeResult:
             mean_angular_speed=stats.mean_angular_speed,
             speed_at_min_dist=stats.speed_at_min_dist,
             ang_speed_at_min_dist=stats.ang_speed_at_min_dist,
+            max_lin_credit=stats.max_lin_credit_s,
+            max_ang_credit=stats.max_ang_credit_s,
         )
 
 @dataclass
@@ -90,6 +95,10 @@ class EvolutionStats:
     hover_credit_s: float = 0.0
     max_hover_credit_s: float = 0.0
     spinout_time: float = 0.0
+    lin_credit_s: float = 0.0
+    ang_credit_s: float = 0.0
+    max_lin_credit_s: float = 0.0
+    max_ang_credit_s: float = 0.0
 
     def __post_init__(self) -> None:
         if self.min_dist_m <= 0.0:

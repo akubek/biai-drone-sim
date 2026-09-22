@@ -14,16 +14,15 @@ from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
-from src.ai.fitness import compute_fitness, hover_credit
+from src.ai.fitness import compute_fitness, hover_credit, ramp
 from src.ai.holdout import HoldoutReporter
-from src.ai.speciation import AdaptiveThreshold
 from src.ai.state import TrainingState
 from src.config.config import *
 from src.config.evolution import *
 from src.config.physics import *
 from src.config.rewards import *
 from src.core.drone import Drone
-from src.core.environment import Scenario, generate_scenarios, load_holdout
+from src.core.environment import Scenario, load_holdout
 from src.core.flight_controller import FlightController
 from src.core.stats import EndReason, EpisodeResult, EvolutionStats
 from src.utils.logger import CSVTrainingReporter
@@ -222,6 +221,10 @@ def check_termination(
         stats.hover_credit_s += dt * hover_credit(speed, abs(drone._angular_vel))
         stats.max_hover_credit_s = max(stats.max_hover_credit_s,
                                    stats.hover_credit_s)
+        stats.lin_credit_s += dt * ramp(speed, HOVER_MAX_SPEED_M_S, V_REF)
+        stats.ang_credit_s += dt * ramp(abs(drone._angular_vel), HOVER_MAX_ANGULAR_VEL, W_REF)
+        stats.max_lin_credit_s = max(stats.max_lin_credit_s, stats.lin_credit_s)
+        stats.max_ang_credit_s = max(stats.max_ang_credit_s, stats.ang_credit_s)
     # reset hover time if not at target
     else:
         stats.hover_time_s = 0.0

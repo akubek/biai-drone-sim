@@ -1,10 +1,10 @@
 import csv
 import os
+import random
 import statistics
 import time
 
 from neat.reporting import BaseReporter
-from numpy import random
 
 from src.ai.state import TrainingState
 from src.core.stats import EndReason, EpisodeResult
@@ -23,6 +23,7 @@ HEADERS = [
     "mean_angular_speed",
     "species_count", "best_nodes", "best_conns",
     "mean_speed_at_target", "mean_ang_speed_at_target", "n_touched", "mean_max_hover_time",
+    "mean_lin_credit", "mean_ang_credit",
     "compat_threshold", "rep_dist_min", "rep_dist_med", "rep_dist_max",
 ]
 
@@ -146,6 +147,8 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean([r.ang_speed_at_min_dist for r in touched]), 4) if touched else "", #mean_ang_speed_at_target
             len(touched), #n_touched
             round(statistics.fmean([r.max_hover_time_s for r in episodes]), 4), #mean_max_hover_time
+            round(statistics.fmean([r.max_lin_credit_s for r in episodes]), 4), #mean_lin_credit
+            round(statistics.fmean([r.max_ang_credit_s for r in episodes]), 4), #mean_ang_credit
             round(species.species_set_config.compatibility_threshold, 4) if species else "",
             rep_min,  #rep_dist_min
             rep_med,  #rep_dist_med

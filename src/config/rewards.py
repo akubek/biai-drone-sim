@@ -10,5 +10,6 @@ FIT_CRASH_FORFEIT = 0.5         # kara za kolizje (ułamek zdobytych punktów kt
 FIT_KAMIKAZE_FORFEIT = 0.8      # dodatkowa kara za uderzenie z predkoscia (ułamek zdobytych punktów ktory zostaje odebrany)
 FIT_ESCAPE_FORFEIT = 0.5       # kara za ucieczke (ułamek zdobytych punktów ktory zostaje odebrany)
 FIT_W_ENERGY = 0.0        # kara za zuzycie energii
+FIT_W_BRAKING = 2.0        # nagroda za hamowanie (ułamek zdobytych punktów ktory zostaje przyznany)
 
 assert 0.0 <= FIT_CRASH_FORFEIT < FIT_KAMIKAZE_FORFEIT < 1.0

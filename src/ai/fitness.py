@@ -7,6 +7,7 @@ Rewards for progress and hover are integrals over the trajectory so they are acc
 in stats.progress_raw / stats.hover_raw during the flight.
 """
 
+from src.config.config import BRAKE_RADIUS
 from src.config.evolution import *
 from src.config.physics import SAFE_CRASH_SPEED_M_S
 from src.config.rewards import *
@@ -33,25 +34,33 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
     )
     components.energy_penalty = -FIT_W_ENERGY * stats.mean_throttle
 
+    if stats.min_dist_m < BRAKE_RADIUS:
+        closeness = 1.0 - stats.min_dist_m / BRAKE_RADIUS
+        brake_lin = ramp(stats.speed_at_min_dist, HOVER_MAX_SPEED_M_S, V_REF)
+        brake_ang = ramp(stats.ang_speed_at_min_dist, HOVER_MAX_ANGULAR_VEL, W_REF)
+        components.braking = FIT_W_BRAKING * closeness * brake_lin * brake_ang
+
+    earned = components.progress + components.discovery + components.braking
+
     if reason is EndReason.CRASH:
-        earned = components.progress + components.discovery
         components.crash_penalty = -FIT_CRASH_FORFEIT * earned
         if stats.crash_speed > SAFE_CRASH_SPEED_M_S:
             components.kamikaze_penalty = -(FIT_KAMIKAZE_FORFEIT
                                             - FIT_CRASH_FORFEIT) * earned
 
     elif reason is EndReason.ESCAPE:
-        earned = components.progress + components.discovery
         components.escape_penalty = -FIT_ESCAPE_FORFEIT * earned
+
+    
 
 
     return components
 
 def hover_credit(speed: float, ang_speed: float) -> float:
-    return (_ramp(speed, HOVER_MAX_SPEED_M_S, V_REF)
-            * _ramp(abs(ang_speed), HOVER_MAX_ANGULAR_VEL, W_REF))
+    return (ramp(speed, HOVER_MAX_SPEED_M_S, V_REF)
+            * ramp(abs(ang_speed), HOVER_MAX_ANGULAR_VEL, W_REF))
 
-def _ramp(x: float, lo: float, hi: float) -> float:
+def ramp(x: float, lo: float, hi: float) -> float:
     if x <= lo:  return 1.0
     if x >= hi:  return 0.0
     return (hi - x) / (hi - lo)
