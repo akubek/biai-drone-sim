@@ -1,4 +1,4 @@
-from src.core.environment import TIERS
+from src.core.environment import TIERS, Scenario, generate_scenarios
 from src.core.stats import EpisodeResult
 
 
@@ -15,7 +15,8 @@ class TrainingState:
         # Retrieving hyperparameters
         self.max_help_gens = exp_config.get("max_help_gens", 100)
         self.start_weight = exp_config.get("start_weight", 0.85)
-        self.scenarios_per_genome = exp_config.get("scenarios_per_genome", 3)
+        self.scenarios_per_genome = exp_config.get("scenarios_per_genome", 6)
+        self.scenario_refresh_every = exp_config.get("scenario_refresh_every", 20)
 
         # Variables tracking progress
         self.generation = 0
@@ -29,6 +30,9 @@ class TrainingState:
 
         self.last_metrics: dict[int, EpisodeResult] = {}
         # Immediately initialize parameters for the 0th generation
+        self._scenarios: list[Scenario] | None = None
+        self._scenarios_tier: int | None = None
+        self._gens_since_refresh: int = -1
         self.update_parameters()
 
     @property
@@ -65,3 +69,14 @@ class TrainingState:
                 self.current_help_weight = 0.15
             else:
                 self.current_help_weight = 0.0
+
+    def scenarios_for_generation(self, generation: int) -> list[Scenario]:
+        stale = (self._scenarios is None
+                or self._scenarios_tier != self.current_tier
+                or self._gens_since_refresh >= self.scenario_refresh_every)
+        if stale:
+            self._scenarios = generate_scenarios(self.scenarios_per_genome,
+                                            self.current_tier)
+            self._scenarios_tier = self.current_tier
+            self._gens_since_refresh = 0
+        return self._scenarios
