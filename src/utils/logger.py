@@ -18,7 +18,7 @@ HEADERS = [
     "mean_energy_penalty", "mean_shaping",
     "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
-    "mean_time_to_target", "mean_energy", "mean_min_dist_ratio",
+    "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
     "species_count", "best_nodes", "best_conns",
 ]
 
@@ -114,6 +114,7 @@ class CSVTrainingReporter(BaseReporter):
 
             round(statistics.fmean([r.time_alive_s for r in successes]), 3) if successes else "", #mean_time_to_target
             round(statistics.fmean([r.energy for r in episodes]), 4), #mean_energy
+            round(statistics.fmean([r.mean_throttle for r in episodes]), 4), #mean_throttle
             round(statistics.fmean([r.min_dist_ratio for r in episodes]), 4), #mean_min_dist_ratio
 
             len(species.species) if species else 0, #species_count

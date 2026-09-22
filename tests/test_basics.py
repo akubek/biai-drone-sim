@@ -172,3 +172,20 @@ def test_fast_pass_through_target_is_not_hover():
 
     assert stats.hover_time == 0.0
     assert stats.has_touched_target is True
+
+def test_hovering_throttle_matches_base_hover():
+    """Drone maintaining a hover should consume thrust equal to the base hover value."""
+    drone = Drone(2.5, 1.8)
+    hover = (drone.mass * drone.gravity) / (2 * drone.max_thrust)
+    stats = EvolutionStats(initial_dist_m=1.0, min_dist_m=1.0,
+                           last_stagnation_dist_m=1.0,
+                           max_allowed_escape_dist_m=10.0)
+    drone.set_engine_thrust(hover, hover)
+    dt = 1 / 60
+    for _ in range(300):
+        drone.update(dt)
+        stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
+        stats.total_time_alive += dt
+
+    throttle = stats.energy_raw / (2.0 * stats.total_time_alive)
+    assert abs(throttle - hover) < 0.01, f"throttle {throttle:.4f} vs hover {hover:.4f}"

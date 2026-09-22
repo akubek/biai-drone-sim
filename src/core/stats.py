@@ -40,6 +40,7 @@ class EpisodeResult:
     max_hover_time_s: float
     energy: float
     touched_target: bool
+    mean_throttle: float
 
     @property
     def success(self) -> bool:
@@ -59,6 +60,7 @@ class EpisodeResult:
             max_hover_time_s=stats.max_hover_time_achieved,
             energy=stats.energy_raw / max_energy if max_energy > 0 else 0.0,
             touched_target=stats.has_touched_target,
+            mean_throttle=stats.mean_throttle,
         )
 
 @dataclass
@@ -77,3 +79,9 @@ class EvolutionStats:
     crash_speed: float = 0.0
 
     spinout_time: float = 0.0
+
+    @property
+    def mean_throttle(self) -> float:
+        """Mean throttle as a continuous value between 0 and 1, independent of episode length."""
+        return (self.energy_raw / (2.0 * self.total_time_alive)
+                if self.total_time_alive > 0 else 0.0)

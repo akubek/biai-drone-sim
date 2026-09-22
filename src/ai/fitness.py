@@ -31,6 +31,7 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
         hover=FIT_W_HOVER * hover_ratio,
         success=FIT_W_SUCCESS if reason is EndReason.SUCCESS else 0.0,
     )
+    components.energy_penalty = -FIT_W_ENERGY * stats.mean_throttle
 
     if reason is EndReason.CRASH:
         components.crash_penalty = -FIT_W_CRASH

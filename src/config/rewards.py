@@ -8,4 +8,4 @@ FIT_W_HOVER = 1.0         # za ulamek wymaganego czasu zawisu
 FIT_W_SUCCESS = 2.0       # za ukonczenie zadania
 FIT_W_CRASH = 0.3         # kara za kolizje
 FIT_W_KAMIKAZE = 0.3      # dodatkowa kara za uderzenie z predkoscia
-FIT_W_ENERGY = 0.0        # wlaczane w #21
+FIT_W_ENERGY = 0.0        # kara za zuzycie energii
