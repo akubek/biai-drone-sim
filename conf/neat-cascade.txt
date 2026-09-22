@@ -51,13 +51,13 @@ response_replace_rate   = 0.0
 
 # Opcje mutacji strukturalnych (dodawanie/usuwanie neuronow i polaczen)
 conn_add_prob           = 0.1
-conn_delete_prob        = 0.1
+conn_delete_prob        = 0.05
 node_add_prob           = 0.1
-node_delete_prob        = 0.1
+node_delete_prob        = 0.05
 
 # Geny polaczen (czy mutacja moze odciac jakis sensor)
 enabled_default         = True
-enabled_mutate_rate     = 0.1
+enabled_mutate_rate     = 0.005
 
 feed_forward            = True
 initial_connection      = full_nodirect
@@ -67,7 +67,7 @@ compatibility_disjoint_coefficient = 1.0
 compatibility_weight_coefficient   = 0.1
 
 [DefaultSpeciesSet]
-compatibility_threshold = 3.6
+compatibility_threshold = 0.07
 
 
 [DefaultStagnation]
