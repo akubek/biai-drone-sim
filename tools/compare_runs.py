@@ -9,16 +9,17 @@ Uzycie:
 """
 
 from __future__ import annotations
- 
+
 import argparse
 import csv
+import itertools
 import json
 import statistics
 import sys
 from dataclasses import dataclass
 from pathlib import Path
- 
- 
+
+
 @dataclass
 class RunSummary:
     name: str
@@ -56,7 +57,7 @@ def _floats(rows: list[dict], column: str) -> list[float]:
 def _jitter(values: list[float]) -> float:
     if len(values) < 2:
         return 0.0
-    return statistics.fmean(abs(b - a) for a, b in zip(values, values[1:]))
+    return statistics.fmean(abs(b - a) for a, b in itertools.pairwise(values))
  
  
 def _jitter_rel(values: list[float]) -> float:
@@ -138,7 +139,7 @@ def print_table(runs: list[RunSummary], tail: int) -> None:
     print(header)
     print("-" * len(header))
     for run in runs:
-        print(" ".join(f"{str(fn(run)):<{w}}" for _, fn, w in cols))
+        print(" ".join(f"{fn(run)!s:<{w}}" for _, fn, w in cols))
  
     dirty = [r.name for r in runs if r.git_dirty == "TAK"]
     if dirty:
