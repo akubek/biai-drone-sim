@@ -19,10 +19,10 @@ from src.core.map_generator import generate_grid_obstacles
 TIERS: dict[int, dict] = {
     1: {"dist_m": (0.5, 1.0), "obstacles": 0, "description": "target close, empty map"},
     2: {"dist_m": (1.0, 2.0), "obstacles": 0, "description": "medium distance, empty map"},
-    3: {"dist_m": (3.0, 5.0), "obstacles": 0, "description": "far, close to walls"},
-    4: {"dist_m": (2.0, 4.0), "obstacles": 1, "description": "singular obstacle"},
-    5: {"dist_m": (2.0, 4.0), "obstacles": 3, "description": "several obstacles (3) on the way"},
-    6: {"dist_m": (2.0, 4.0), "obstacles": 5, "description": "maximum obstacles (5)"},
+    3: {"dist_m": (2.0, 3.0), "obstacles": 1, "description": "one obstacle"},
+    4: {"dist_m": (2.0, 4.0), "obstacles": 2, "description": "two obstacles"},
+    5: {"dist_m": (2.0, 4.0), "obstacles": 3, "description": "three obstacles"},
+    6: {"dist_m": (2.0, 4.0), "obstacles": 5, "description": "five obstacles"},
 }
 
 @dataclass(frozen=True)
