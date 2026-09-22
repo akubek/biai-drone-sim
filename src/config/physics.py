@@ -8,7 +8,7 @@ TURN_SPEED = 4.0          # Mnożnik obrotu wizualnego/faktycznego
 SAFE_CRASH_SPEED_M_S = 0.5 # Prędkość, którą uznajemy za bezpieczną w zderzeniu
 
 # --- SENSORY I NORMALIZACJA ---
-MAX_SPEED_NORM = 15.0     # Wartość do normalizacji prędkości (wejście sieci)
+MAX_SPEED_NORM = 5.0     # Wartość do normalizacji prędkości (wejście sieci)
 MAX_ANGULAR_NORM = 5.0    # Wartość do normalizacji prędkości kątowej (wejście sieci)
 MAX_SENSOR_DIST_M = 2.5
 RAYCAST_STEP_M = 0.1        # Skok promienia przy sprawdzaniu kolizji

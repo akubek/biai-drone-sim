@@ -8,6 +8,7 @@ PPM = 200.0
 TARGET_SIZE_PX = 50       # Promień punktu docelowego
 MAP_MARGIN_PX = 80        # Minimalna odległość drona/celu od krawędzi ekranu
 MIN_SPAWN_DIST_M = 2.0    # Minimalna odległość w linii prostej między startem a celem
+BRAKE_RADIUS = 1.0        # metry, z drogi hamowania
 
 # --- PARAMETRY SIATKI (GRID MAP) ---
 GRID_SIZE_M = 0.7       # Wielkość jednego kafelka (np. 1.5x - 2x średnica drona)

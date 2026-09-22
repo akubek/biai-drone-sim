@@ -442,9 +442,9 @@ class Drone:
         dy = target_y_m - self._y
 
         # Odległość do celu
-        max_dist_m = math.hypot(screen_width_px / PPM, screen_height_px / PPM)
+        #max_dist_m = math.hypot(screen_width_px / PPM, screen_height_px / PPM)
         dist_m = math.hypot(dx, dy)
-        norm_dist = dist_m / max_dist_m
+        norm_dist = math.exp(-dist_m / 2.0)
 
         # Kąt do celu Z PUNKTU WIDZENIA DRONA
         target_angle_rad = math.atan2(dy, dx)
