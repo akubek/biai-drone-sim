@@ -5,6 +5,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.core.environment import TIERS
+
 
 def _git_info() -> dict:
     """Commit hash and information about whether the working tree had uncommitted changes."""
@@ -35,6 +37,7 @@ def create_run_dir(arch: str, exp_config: dict, config_path: str) -> Path:
     # Kopie konfiguracji - treść (mogą się zmieniać)
     shutil.copy(config_path, run_dir / "conf_neat.txt")
     shutil.copy(Path("src") / "training_config.json", run_dir / "training_config.json")
+    shutil.copy(Path("conf") / "curriculum.json", run_dir / "curriculum.json")
     for name in ("rewards.py", "evolution.py", "physics.py", "config.py"):
         shutil.copy(Path("src") / "config" / name, run_dir / f"config_{name}")
 
@@ -45,6 +48,7 @@ def create_run_dir(arch: str, exp_config: dict, config_path: str) -> Path:
         "exp_config": exp_config,
         "status": "running",
         **_git_info(),
+        "tiers": TIERS,
     }
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"

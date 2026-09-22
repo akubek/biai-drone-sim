@@ -11,6 +11,7 @@ import neat
 import pygame
 from neat.nn import FeedForwardNetwork
 
+from src.ai.curriculum import CurriculumController
 from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
 from src.ai.fitness import compute_fitness, hover_credit, ramp
@@ -541,6 +542,7 @@ def run_neat_visual(
         every=10,
     )
     population.add_reporter(holdout)
+    population.add_reporter(CurriculumController(global_state, holdout))
     
     reporter = CSVTrainingReporter(
         global_state,
@@ -600,6 +602,7 @@ def run_neat_headless(
         every=10,
     )
     population.add_reporter(holdout)
+    population.add_reporter(CurriculumController(global_state, holdout))
 
     reporter = CSVTrainingReporter(
         global_state,

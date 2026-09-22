@@ -29,12 +29,14 @@ class HoldoutReporter(BaseReporter):
         self.generation = 0
         self.last_overall_success = ""      # read by CSVTrainingReporter
         self.filename = os.path.join(folder, "holdout_log.csv")
+        self.last_by_tier: dict[int, dict] = {} 
         with open(self.filename, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(HEADERS)
 
     def start_generation(self, generation: int) -> None:
         self.generation = generation
-        self.last_overall_success = ""  
+        self.last_overall_success = ""
+        self.last_by_tier = {}
 
     def post_evaluate(self, config, population, species, best_genome) -> None:
         if best_genome is None or self.generation % self.every != 0:
@@ -50,12 +52,13 @@ class HoldoutReporter(BaseReporter):
         for tier in sorted(by_tier):
             results = by_tier[tier]
             n = len(results)
-            rows.append([
-                self.generation, tier, n,
-                round(sum(1 for r in results if r.success) / n, 4),
-                round(statistics.fmean(r.min_dist_ratio for r in results), 4),
-                round(sum(1 for r in results if r.end_reason is EndReason.CRASH) / n, 4),
-            ])
+            succ = round(sum(1 for r in results if r.success) / n, 4)
+            crash = round(sum(1 for r in results
+                            if r.end_reason is EndReason.CRASH) / n, 4)
+            dist = round(statistics.fmean(r.min_dist_ratio for r in results), 4)
+
+            rows.append([self.generation, tier, n, succ, dist, crash])
+            self.last_by_tier[tier] = {"success_rate": succ, "crash_rate": crash}
 
         with open(self.filename, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerows(rows)
