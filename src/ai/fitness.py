@@ -48,8 +48,8 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
     return components
 
 def hover_credit(speed: float, ang_speed: float) -> float:
-    return _ramp(speed, HOVER_MAX_SPEED_M_S, V_REF) \
-         * _ramp(abs(ang_speed), HOVER_MAX_ANGULAR_VEL, W_REF)
+    return (_ramp(speed, HOVER_MAX_SPEED_M_S, V_REF)
+            * _ramp(abs(ang_speed), HOVER_MAX_ANGULAR_VEL, W_REF))
 
 def _ramp(x: float, lo: float, hi: float) -> float:
     if x <= lo:  return 1.0
