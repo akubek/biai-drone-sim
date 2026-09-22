@@ -70,13 +70,14 @@ class TrainingState:
             else:
                 self.current_help_weight = 0.0
 
-    def scenarios_for_generation(self, generation: int) -> list[Scenario]:
+    def scenarios_for_generation(self) -> list[Scenario]:
         stale = (self._scenarios is None
                 or self._scenarios_tier != self.current_tier
                 or self._gens_since_refresh >= self.scenario_refresh_every)
         if stale:
             self._scenarios = generate_scenarios(self.scenarios_per_genome,
-                                            self.current_tier)
+                                                self.current_tier)
             self._scenarios_tier = self.current_tier
             self._gens_since_refresh = 0
+        self._gens_since_refresh += 1
         return self._scenarios

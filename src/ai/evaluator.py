@@ -17,10 +17,7 @@ class CurriculumParallelEvaluator(neat.ParallelEvaluator):
         # 1. Przeliczamy parametry dla nadchodzącej generacji na głównym wątku
         self.state.update_parameters()
 
-        scenarios = generate_scenarios(
-            count=self.state.scenarios_per_genome,
-            tier=self.state.current_tier
-        )
+        scenarios = self.state.scenarios_for_generation()
         cast(Any, config).shared_scenarios = scenarios
         
         jobs = [

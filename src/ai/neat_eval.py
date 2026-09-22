@@ -372,10 +372,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
     global_state.update_parameters()
 
-    scenarios = generate_scenarios(
-        count=global_state.scenarios_per_genome,
-        tier=global_state.current_tier,
-    )
+    scenarios = global_state.scenarios_for_generation()
 
     episode_results: dict[int, list[EpisodeResult]] = {g.key: [] for _, g in genomes}
     total_population = len(genomes)

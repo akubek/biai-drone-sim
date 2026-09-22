@@ -98,6 +98,13 @@ def parse_and_run() -> None:
         help="Disable curriculum learning, learning only at starting tier."
     )
 
+    parser.add_argument(
+        "--scenario-refresh",
+        type=int,
+        default=20,
+        help="Number of generations after which scenarios are refreshed."
+    )
+
     args = parser.parse_args()
 
     # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
@@ -123,7 +130,7 @@ def parse_and_run() -> None:
 
     exp_config.setdefault("start_tier", 1)
     exp_config.setdefault("curriculum", True)
-    
+
     print(f"TIER: {exp_config['start_tier']} | CURRICULUM: {exp_config['curriculum']}")
 
     # --- Determine the path to the config file (according to the new structure) ---
@@ -145,6 +152,8 @@ def parse_and_run() -> None:
         exp_config["scenarios_per_genome"] = args.scenarios
     if args.pop_size is not None:
         exp_config["pop_size"] = args.pop_size
+    if args.scenario_refresh is not None:
+        exp_config["scenario_refresh"] = args.scenario_refresh
 
     # ==========================================
     # 3. ROUTING LOGIC
