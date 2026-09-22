@@ -7,5 +7,6 @@
     "start_weight": 0.85,
     "success_threshold_stage1": 75.0,
     "success_threshold_stage2": 70.0,
-    "scenarios_per_genome": 6
+    "scenarios_per_genome": 6,
+    "scenario_rotate_every": 3
 }
