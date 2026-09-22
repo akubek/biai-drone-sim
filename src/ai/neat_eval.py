@@ -16,6 +16,7 @@ from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
 from src.ai.fitness import compute_fitness, hover_credit
 from src.ai.holdout import HoldoutReporter
+from src.ai.speciation import AdaptiveThreshold
 from src.ai.state import TrainingState
 from src.config.config import *
 from src.config.evolution import *
@@ -108,6 +109,7 @@ def _setup_population(
     population.add_reporter(neat.StatisticsReporter())
     checkpoint_prefix = str(checkpoint_dir / "neat-checkpoint-")
     population.add_reporter(neat.Checkpointer(20, filename_prefix=checkpoint_prefix))
+    population.add_reporter(AdaptiveThreshold(config, target=12))
 
     return population, config
 

@@ -20,7 +20,8 @@ HEADERS = [
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
     "species_count", "best_nodes", "best_conns",
-    "mean_speed_at_target", "n_touched", "mean_max_hover_time"
+    "mean_speed_at_target", "n_touched", "mean_max_hover_time",
+    "compat_threshold",
 ]
 
 
@@ -126,6 +127,7 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean([r.speed_at_min_dist for r in touched]), 4) if touched else "", #mean_speed_at_target
             len(touched), #n_touched
             round(statistics.fmean([r.max_hover_time_s for r in episodes]), 3), #mean_max_hover_time
+            config.species_set_config.compatibility_threshold,
         ]
 
         assert len(row) == len(HEADERS), \
