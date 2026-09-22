@@ -31,25 +31,13 @@ class CurriculumController(BaseReporter):
     def post_evaluate(self, config, population, species, best_genome) -> None:
         if not self.state.curriculum_enabled:
             return
-        s = self.holdout.last_by_tier.get(self.state.current_tier)
+        tier = self.state.current_tier
+        s = self.holdout.last_by_tier.get(tier)
         if s is None:
-            return                      # brak swiezej ewaluacji w tej generacji
-
-        self._ok = (self._ok + 1
-                    if s["success_rate"] >= self.promote["success_rate"]
-                    and s["crash_rate"] <= self.promote["crash_rate"]
-                    else 0)
-        self._bad = (self._bad + 1
-                     if s["success_rate"] < self.demote["success_rate"]
-                     else 0)
-
-        if self.generation - self._tier_since < self.min_dwell:
             return
 
-        tier = self.state.current_tier
         exp = self.baselines[str(tier)]
-
-        need_success = max(0.05, exp["success"] * self.promote["expert_fraction"])
+        need_success = max(self.promote["success_floor"], exp["success"] * self.promote["expert_fraction"])
         allow_crash = max(self.promote["crash_floor"], exp["crash"])
         bad_below = exp["success"] * self.demote["expert_fraction"]
 
@@ -59,13 +47,28 @@ class CurriculumController(BaseReporter):
                     else 0)
         self._bad = self._bad + 1 if s["success_rate"] < bad_below else 0
 
+        if self.generation - self._tier_since < self.min_dwell:
+            return
+
+        if (self._ok >= self.promote["consecutive"] and tier < max(TIERS)
+                and self.generation >= self._cooldown_until):
+            self._switch(tier + 1, species, "AWANS")
+        elif self._bad >= self.demote["consecutive"] and tier > min(TIERS):
+            self._switch(tier - 1, species, "DEGRADACJA")
+            self._cooldown_until = self.generation + self.cooldown
+
     def _switch(self, new_tier: int, species, label: str) -> None:
         print(f"[curriculum] gen {self.generation}: {label} "
               f"{self.state.current_tier} -> {new_tier}")
+
+        if new_tier < self.state.current_tier:
+            self.state.force_scenario_reset()
+        else:
+            self.state.force_rotation() # advance counter to force scenario rotation at newest refresh
         self.state.current_tier = new_tier
         self._tier_since = self.generation
         self._ok = self._bad = 0
-        # #26 - zadanie sie zmienilo, wiec stagnacja liczy sie od zera
+        # zadanie sie zmienilo, wiec stagnacja liczy sie od zera
         for sp in species.species.values():
             sp.last_improved = self.generation
             sp.fitness_history = []

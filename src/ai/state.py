@@ -69,9 +69,24 @@ class TrainingState:
                 self.current_help_weight = 0.15
             else:
                 self.current_help_weight = 0.0
+    @property
+    def tier_mix(self) -> float:
+        """Ulamek scenariuszy na biezacym tierze. 1.0 = przejscie zakonczone."""
+        if not self._scenarios:
+            return 0.0
+        return sum(1 for s in self._scenarios
+                if s.tier == self.current_tier) / len(self._scenarios)
+
+    def force_scenario_reset(self) -> None:
+        """Pelna wymiana zestawu przy najblizszym wywolaniu - uzywane przy degradacji."""
+        self._scenarios = None
+
+    def force_rotation(self) -> None:
+        """Najblizsze wywolanie wymieni jedna mape - start przejscia bez zwloki."""
+        self._gens_since_rotate = self.rotate_every
 
     def scenarios_for_generation(self) -> list[Scenario]:
-        if self._scenarios is None or self._scenarios_tier != self.current_tier:
+        if self._scenarios is None: #or self._scenarios_tier != self.current_tier -> changed so that tier jumps are gradual.
             self._scenarios = generate_scenarios(self.scenarios_per_genome,
                                                 self.current_tier)
             self._scenarios_tier = self.current_tier

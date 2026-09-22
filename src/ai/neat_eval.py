@@ -542,8 +542,6 @@ def run_neat_visual(
         every=10,
     )
     population.add_reporter(holdout)
-    population.add_reporter(CurriculumController(global_state, holdout))
-    
     reporter = CSVTrainingReporter(
         global_state,
         folder=str(run_dir),
@@ -552,6 +550,7 @@ def run_neat_visual(
     )
     reporter.holdout = holdout
     population.add_reporter(reporter)
+    population.add_reporter(CurriculumController(global_state, holdout))
 
     print("Starting evolution in VISUAL mode...")
     
