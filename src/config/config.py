@@ -12,3 +12,4 @@ BRAKE_RADIUS = 1.0        # metry, z drogi hamowania
 
 # --- PARAMETRY SIATKI (GRID MAP) ---
 GRID_SIZE_M = 0.7       # Wielkość jednego kafelka (np. 1.5x - 2x średnica drona)
+OBSTACLE_CORRIDOR_M = 1.0 

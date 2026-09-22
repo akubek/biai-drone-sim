@@ -4,6 +4,8 @@ from collections import deque
 
 import pygame
 
+from src.config.config import OBSTACLE_CORRIDOR_M
+
 
 def _get_grid_coords(px_pos: tuple[int, int], grid_size: int) -> tuple[int, int]:
     """Zwraca indeks (kolumna, wiersz) dla danej pozycji w pikselach."""
@@ -33,6 +35,17 @@ def _is_solvable(grid: list[list[bool]], start_idx: tuple[int, int], target_idx:
                     
     return False # Brak przejścia
 
+def _dist_point_to_segment_m(px: float, py: float,
+                             ax: float, ay: float,
+                             bx: float, by: float) -> float:
+    """Odleglosc punktu od odcinka - z obcieciem rzutu do [0, 1]."""
+    abx, aby = bx - ax, by - ay
+    denom = abx * abx + aby * aby
+    if denom == 0.0:
+        return math.hypot(px - ax, py - ay)
+    t = max(0.0, min(1.0, ((px - ax) * abx + (py - ay) * aby) / denom))
+    return math.hypot(px - (ax + t * abx), py - (ay + t * aby))
+
 def generate_grid_obstacles(
     width_px: int, 
     height_px: int, 
@@ -56,23 +69,32 @@ def generate_grid_obstacles(
     
     safe_zone_m: float = grid_size_m / 2.0 + 0.2 # half of grid cell + hald of drone size (drone size = 0.35 + margin)
 
-    # 2. Tworzymy listę wszystkich dozwolonych komórek (poza safe zone)
-    available_cells = []
+    start_x_m, start_y_m = start_px[0] / PPM, start_px[1] / PPM
+    target_x_m, target_y_m = target_px[0] / PPM, target_px[1] / PPM
+
+    near: list[tuple[int, int]] = []
+    far: list[tuple[int, int]] = []
     for x in range(cols):
         for y in range(rows):
             cell_center_x_m = (x * grid_size_px + grid_size_px / 2) / PPM
             cell_center_y_m = (y * grid_size_px + grid_size_px / 2) / PPM
 
-            dist_to_start_m = math.hypot(cell_center_x_m - start_px[0] / PPM,
-                                        cell_center_y_m - start_px[1] / PPM)
-            dist_to_target_m = math.hypot(cell_center_x_m - target_px[0] / PPM,
-                                        cell_center_y_m - target_px[1] / PPM)
+            dist_to_start_m = math.hypot(cell_center_x_m - start_x_m,
+                                         cell_center_y_m - start_y_m)
+            dist_to_target_m = math.hypot(cell_center_x_m - target_x_m,
+                                          cell_center_y_m - target_y_m)
+            if dist_to_start_m <= safe_zone_m or dist_to_target_m <= safe_zone_m:
+                continue
 
-            if dist_to_start_m > safe_zone_m and dist_to_target_m > safe_zone_m:
-                available_cells.append((x, y))
+            d_line_m = _dist_point_to_segment_m(
+                cell_center_x_m, cell_center_y_m,
+                start_x_m, start_y_m, target_x_m, target_y_m,
+            )
+            (near if d_line_m <= OBSTACLE_CORRIDOR_M else far).append((x, y))
 
-    # 3. Przemieszanie indeksów (losowość mapy)
-    random.shuffle(available_cells)
+    random.shuffle(near)
+    random.shuffle(far)
+    available_cells = near + far
 
     # 4. Konstruktywne dodawanie przeszkód z walidacją BFS
     obstacles_placed = 0

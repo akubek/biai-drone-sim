@@ -8,13 +8,14 @@ from src.ai.fitness import compute_fitness
 from src.ai.neat_eval import check_termination
 from src.config.config import (
     GRID_SIZE_M,
+    OBSTACLE_CORRIDOR_M,
     PPM,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
 )
 from src.core.drone import Drone
-from src.core.environment import TIERS, generate_scenarios
-from src.core.map_generator import generate_grid_obstacles
+from src.core.environment import TIERS, generate_scenarios, generate_start_and_target_in_band
+from src.core.map_generator import _dist_point_to_segment_m, generate_grid_obstacles
 from src.core.stats import EndReason, EvolutionStats
 
 
@@ -240,3 +241,41 @@ def test_fresh_stats_have_zero_progress():
     stats = EvolutionStats(initial_dist_m=10.0)
     assert stats.min_dist_m == pytest.approx(10.0)
     # świeży epizod = zerowy postęp, nigdy pełny
+
+def test_dist_point_to_segment_clamps_at_ends():
+    # odcinek (0,0)-(2,0)
+    assert _dist_point_to_segment_m(1, 1, 0, 0, 2, 0) == pytest.approx(1.0)   # prostopadle
+    assert _dist_point_to_segment_m(0, 0, 0, 0, 2, 0) == pytest.approx(0.0)   # koniec
+    assert _dist_point_to_segment_m(5, 0, 0, 0, 2, 0) == pytest.approx(3.0)   # ZA odcinkiem
+    assert _dist_point_to_segment_m(-1, 0, 0, 0, 2, 0) == pytest.approx(1.0)  # PRZED
+
+def test_obstacles_prefer_route_corridor():
+    random.seed(7)
+    near = total = 0
+    for _ in range(40):
+        start_px, target_px = generate_start_and_target_in_band(2.0, 4.0)
+        for r in generate_grid_obstacles(SCREEN_WIDTH, SCREEN_HEIGHT,
+                                         start_px, target_px,
+                                         GRID_SIZE_M, 2, PPM):
+            d = _dist_point_to_segment_m(
+                r.centerx / PPM, r.centery / PPM,
+                start_px[0] / PPM, start_px[1] / PPM,
+                target_px[0] / PPM, target_px[1] / PPM)
+            total += 1
+            near += d <= OBSTACLE_CORRIDOR_M + GRID_SIZE_M / 2
+    assert near / total > 0.7     # przed zmiana wychodzilo ~0.3
+
+def test_obstacle_count_still_exact_with_corridor():
+    random.seed(11)
+    for tier in (3, 4, 5, 6):
+        spec = TIERS[tier]
+        for _ in range(20):
+            start_px, target_px = generate_start_and_target_in_band(*spec["dist_m"])
+            obstacles = generate_grid_obstacles(
+                SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px,
+                GRID_SIZE_M, spec["obstacles"], PPM,
+            )
+            assert len(obstacles) == spec["obstacles"], (
+                f"tier {tier}: zamowiono {spec['obstacles']}, "
+                f"dostano {len(obstacles)}"
+            )

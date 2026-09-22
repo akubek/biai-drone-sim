@@ -17,6 +17,7 @@ Usage (from the project directory):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import statistics
 import subprocess
@@ -167,6 +168,21 @@ def write_markdown(path: Path, expert: list[TierStats], random_nets: list[TierSt
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(parts), encoding="utf-8")
 
+def write_baselines_json(path: Path, expert: list[TierStats], meta: dict) -> None:
+    """Progi curriculum czytaja stad sufit osiagalny na kazdym tierze."""
+    data = {
+        "meta": meta,
+        "expert": {
+            str(s.tier): {
+                "success": round(s.success_rate, 4),
+                "crash": round(s.crash_rate, 4),
+                "dist_ratio": round(s.mean_dist_ratio, 4),
+            }
+            for s in expert
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Expert and random networks baselines.")
@@ -177,6 +193,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--holdout", default="data/holdout.json")
     parser.add_argument("--out", default="docs/baselines.md")
+    parser.add_argument("--out-json", default="data/baselines.json")
     args = parser.parse_args()
 
     import random
@@ -228,6 +245,8 @@ def main() -> None:
     }
     write_markdown(Path(args.out), expert_stats, random_stats, meta, problems)
     print(f"\nsaved to {args.out}")
+    write_baselines_json(Path(args.out_json), expert_stats, meta)
+    print(f"\nsaved to {args.out_json}")
 
 
 if __name__ == "__main__":

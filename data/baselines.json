@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "date": "2026-09-22 22:40",
+    "commit": "6e8eab5",
+    "arch": "cascade",
+    "net_type": "feedforward",
+    "seed": 42,
+    "holdout": "data/holdout.json",
+    "scenarios": 120,
+    "genomes (floor)": 20
+  },
+  "expert": {
+    "1": {
+      "success": 1.0,
+      "crash": 0.0,
+      "dist_ratio": 0.0458
+    },
+    "2": {
+      "success": 1.0,
+      "crash": 0.0,
+      "dist_ratio": 0.045
+    },
+    "3": {
+      "success": 0.7,
+      "crash": 0.3,
+      "dist_ratio": 0.2598
+    },
+    "4": {
+      "success": 0.4,
+      "crash": 0.6,
+      "dist_ratio": 0.4895
+    },
+    "5": {
+      "success": 0.25,
+      "crash": 0.75,
+      "dist_ratio": 0.595
+    },
+    "6": {
+      "success": 0.15,
+      "crash": 0.85,
+      "dist_ratio": 0.6119
+    }
+  }
+}

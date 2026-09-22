@@ -9,7 +9,7 @@ from src.core.environment import TIERS
 class CurriculumController(BaseReporter):
     """Awans i degradacja tieru na podstawie zamrozonego holdoutu."""
 
-    def __init__(self, state, holdout, rules_path="conf/curriculum.json"):
+    def __init__(self, state, holdout, rules_path="conf/curriculum.json", baselines_path="data/baselines.json"):
         self.state = state
         self.holdout = holdout
         r = json.loads(Path(rules_path).read_text(encoding="utf-8"))
@@ -22,6 +22,8 @@ class CurriculumController(BaseReporter):
         self._ok = 0
         self._bad = 0
         self._cooldown_until = -1
+        self.baselines = json.loads(
+            Path(baselines_path).read_text(encoding="utf-8"))["expert"]
 
     def start_generation(self, generation: int) -> None:
         self.generation = generation
@@ -45,12 +47,17 @@ class CurriculumController(BaseReporter):
             return
 
         tier = self.state.current_tier
-        if (self._ok >= self.promote["consecutive"] and tier < max(TIERS)
-                and self.generation >= self._cooldown_until):
-            self._switch(tier + 1, species, "AWANS")
-        elif self._bad >= self.demote["consecutive"] and tier > min(TIERS):
-            self._switch(tier - 1, species, "DEGRADACJA")
-            self._cooldown_until = self.generation + self.cooldown
+        exp = self.baselines[str(tier)]
+
+        need_success = max(0.05, exp["success"] * self.promote["expert_fraction"])
+        allow_crash = max(self.promote["crash_floor"], exp["crash"])
+        bad_below = exp["success"] * self.demote["expert_fraction"]
+
+        self._ok = (self._ok + 1
+                    if s["success_rate"] >= need_success
+                    and s["crash_rate"] <= allow_crash
+                    else 0)
+        self._bad = self._bad + 1 if s["success_rate"] < bad_below else 0
 
     def _switch(self, new_tier: int, species, label: str) -> None:
         print(f"[curriculum] gen {self.generation}: {label} "

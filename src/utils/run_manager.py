@@ -38,6 +38,7 @@ def create_run_dir(arch: str, exp_config: dict, config_path: str) -> Path:
     shutil.copy(config_path, run_dir / "conf_neat.txt")
     shutil.copy(Path("src") / "training_config.json", run_dir / "training_config.json")
     shutil.copy(Path("conf") / "curriculum.json", run_dir / "curriculum.json")
+    shutil.copy(Path("conf") / "baselines.json", run_dir / "baselines.json")
     for name in ("rewards.py", "evolution.py", "physics.py", "config.py"):
         shutil.copy(Path("src") / "config" / name, run_dir / f"config_{name}")
 

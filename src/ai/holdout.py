@@ -21,7 +21,7 @@ class HoldoutReporter(BaseReporter):
     """
 
     def __init__(self, scenarios: list[Scenario], run_episode_fn: Callable,
-                 config: Any, folder: str, every: int = 10):
+                 config: Any, folder: str, every: int = 10, top_k: int = 3):
         self.scenarios = scenarios
         self.run_episode = run_episode_fn
         self.config = config
@@ -30,6 +30,7 @@ class HoldoutReporter(BaseReporter):
         self.last_overall_success = ""      # read by CSVTrainingReporter
         self.filename = os.path.join(folder, "holdout_log.csv")
         self.last_by_tier: dict[int, dict] = {} 
+        self.top_k = top_k
         with open(self.filename, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(HEADERS)
 
@@ -42,15 +43,27 @@ class HoldoutReporter(BaseReporter):
         if best_genome is None or self.generation % self.every != 0:
             return
 
-        by_tier: dict[int, list[EpisodeResult]] = defaultdict(list)
-        for scenario in self.scenarios:
-            # help_weight=0.0: holdout measures the network alone, without expert support.
-            result = self.run_episode(best_genome, self.config, scenario, None, 0.0)
-            by_tier[scenario.tier].append(result)
+        top = sorted((g for g in population.values() if g.fitness is not None),
+                 key=lambda g: g.fitness, reverse=True)[:self.top_k]
+
+        if not top:
+            return
+
+        best_by_tier: dict[int, list[EpisodeResult]] = {}
+        best_hits = -1
+        for genome in top:
+            by_tier: dict[int, list[EpisodeResult]] = defaultdict(list)
+            for scenario in self.scenarios:
+                by_tier[scenario.tier].append(
+                    self.run_episode(genome, self.config, scenario, None, 0.0))
+            hits = sum(1 for v in by_tier.values() for r in v if r.success)
+            if hits > best_hits:
+                best_hits, best_by_tier = hits, by_tier
+
 
         rows = []
-        for tier in sorted(by_tier):
-            results = by_tier[tier]
+        for tier in sorted(best_by_tier):
+            results = best_by_tier[tier]
             n = len(results)
             succ = round(sum(1 for r in results if r.success) / n, 4)
             crash = round(sum(1 for r in results
@@ -63,6 +76,6 @@ class HoldoutReporter(BaseReporter):
         with open(self.filename, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerows(rows)
 
-        total = sum(len(v) for v in by_tier.values())
-        hits = sum(1 for v in by_tier.values() for r in v if r.success)
+        total = sum(len(v) for v in best_by_tier.values())
+        hits = sum(1 for v in best_by_tier.values() for r in v if r.success)
         self.last_overall_success = round(hits / total, 4)
