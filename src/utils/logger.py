@@ -4,6 +4,7 @@ import statistics
 import time
 
 from neat.reporting import BaseReporter
+from numpy import random
 
 from src.ai.state import TrainingState
 from src.core.stats import EndReason, EpisodeResult
@@ -21,7 +22,7 @@ HEADERS = [
     "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
     "species_count", "best_nodes", "best_conns",
     "mean_speed_at_target", "n_touched", "mean_max_hover_time",
-    "compat_threshold",
+    "compat_threshold", "rep_dist_min", "rep_dist_med", "rep_dist_max",
 ]
 
 
@@ -75,6 +76,20 @@ class CSVTrainingReporter(BaseReporter):
         exp = getattr(self.state, "exp_config", {})
         touched = [r for r in episodes if r.touched_target]
 
+        reps = [s.representative for s in species.species.values()] if species else []
+        if len(reps) > 60:
+            reps = random.sample(reps, 60)
+
+        if len(reps) > 1:
+            _d = sorted(reps[i].distance(reps[j], config.genome_config)
+                        for i in range(len(reps))
+                        for j in range(i + 1, len(reps)))
+            rep_min = round(_d[0], 4)
+            rep_med = round(_d[len(_d) // 2], 4)
+            rep_max = round(_d[-1], 4)
+        else:
+            rep_min = rep_med = rep_max = ""
+
         row = [
             self.run_id,    #run_id
             exp.get("seed", ""), #seed
@@ -100,7 +115,7 @@ class CSVTrainingReporter(BaseReporter):
 
             round(statistics.fmean(r.components.progress for r in episodes), 3), #mean_progress
             round(statistics.fmean(r.components.discovery for r in episodes), 3), #mean_discovery
-            round(statistics.fmean(r.components.hover for r in episodes), 3), #mean_hover
+            round(statistics.fmean(r.components.hover for r in episodes), 4), #mean_hover
             round(statistics.fmean(r.components.success for r in episodes), 3), #mean_success
             round(statistics.fmean(r.components.crash_penalty for r in episodes), 3), #mean_crash_penalty
             round(statistics.fmean(r.components.kamikaze_penalty for r in episodes), 3), #mean_kamikaze_penalty
@@ -126,8 +141,12 @@ class CSVTrainingReporter(BaseReporter):
             len(best_genome.connections) if best_genome else 0, #best_conns
             round(statistics.fmean([r.speed_at_min_dist for r in touched]), 4) if touched else "", #mean_speed_at_target
             len(touched), #n_touched
-            round(statistics.fmean([r.max_hover_time_s for r in episodes]), 3), #mean_max_hover_time
-            config.species_set_config.compatibility_threshold,
+            round(statistics.fmean([r.max_hover_time_s for r in episodes]), 4), #mean_max_hover_time
+            round(species.species_set_config.compatibility_threshold, 4) if species else "",
+            rep_min,  #rep_dist_min
+            rep_med,  #rep_dist_med
+            rep_max,  #rep_dist_max
+
         ]
 
         assert len(row) == len(HEADERS), \

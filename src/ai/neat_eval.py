@@ -109,7 +109,7 @@ def _setup_population(
     population.add_reporter(neat.StatisticsReporter())
     checkpoint_prefix = str(checkpoint_dir / "neat-checkpoint-")
     population.add_reporter(neat.Checkpointer(20, filename_prefix=checkpoint_prefix))
-    population.add_reporter(AdaptiveThreshold(config, target=12))
+    #population.add_reporter(AdaptiveThreshold(target=12))
 
     return population, config
 
