@@ -291,7 +291,7 @@ def step_training_drone(
     stats.total_time_alive += dt
     stats.accumulated_rotation += abs(drone._angular_vel) * dt
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1]) # TODO: maybe not important - we calculate dist_m in check termination as well.
-    stats.observe_distance(dist_m, math.hypot(drone._vel_x, drone._vel_y))
+    stats.observe_distance(dist_m, math.hypot(drone._vel_x, drone._vel_y), abs(drone._angular_vel))
 
     return check_termination(
         drone=drone,

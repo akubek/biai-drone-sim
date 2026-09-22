@@ -20,6 +20,7 @@ class FitnessComponents:
     success: float = 0.0
     crash_penalty: float = 0.0        # ujemny
     kamikaze_penalty: float = 0.0     # ujemny
+    escape_penalty: float = 0.0       # ujemny
     energy_penalty: float = 0.0       # ujemny, wlaczany w #21
     shaping: float = 0.0              # wchodzi w #29
 
@@ -27,7 +28,7 @@ class FitnessComponents:
     def total(self) -> float:
         return (self.progress + self.discovery + self.hover + self.success
                 + self.crash_penalty + self.kamikaze_penalty
-                + self.energy_penalty + self.shaping)
+                + self.escape_penalty + self.energy_penalty + self.shaping )
 
 @dataclass
 class EpisodeResult:
@@ -41,7 +42,9 @@ class EpisodeResult:
     energy: float
     touched_target: bool
     mean_throttle: float
+    mean_angular_speed: float
     speed_at_min_dist: float
+    ang_speed_at_min_dist: float
 
     @property
     def success(self) -> bool:
@@ -62,7 +65,9 @@ class EpisodeResult:
             energy=stats.energy_raw / max_energy if max_energy > 0 else 0.0,
             touched_target=stats.has_touched_target,
             mean_throttle=stats.mean_throttle,
+            mean_angular_speed=stats.mean_angular_speed,
             speed_at_min_dist=stats.speed_at_min_dist,
+            ang_speed_at_min_dist=stats.ang_speed_at_min_dist,
         )
 
 @dataclass
@@ -81,6 +86,7 @@ class EvolutionStats:
     has_touched_target: bool = False
     crash_speed: float = 0.0
     speed_at_min_dist: float = 0.0
+    ang_speed_at_min_dist: float = 0.0
     hover_credit_s: float = 0.0
     max_hover_credit_s: float = 0.0
     spinout_time: float = 0.0
@@ -100,7 +106,12 @@ class EvolutionStats:
         return (self.accumulated_rotation / self.total_time_alive
                 if self.total_time_alive > 0 else 0.0)
 
-    def observe_distance(self, dist_m: float, speed_m_s: float) -> None:
+    def observe_distance(
+            self, dist_m: float,
+            speed_m_s: float,
+            ang_speed: float,
+        ) -> None:
         if dist_m < self.min_dist_m:
             self.min_dist_m = dist_m
             self.speed_at_min_dist = speed_m_s
+            self.ang_speed_at_min_dist = abs(ang_speed)

@@ -172,7 +172,7 @@ def test_fast_pass_through_target_is_not_hover():
         check_termination(drone, stats, (2.5, 1.8), 1 / 60, [])
         drone._vel_x = 2.0                  # utrzymuj predkosc
 
-    assert stats.hover_time == 0.0
+    assert stats.hover_time_s == 0.0
     assert stats.has_touched_target is True
 
 def test_hovering_throttle_matches_base_hover():
@@ -210,22 +210,31 @@ def test_tier_distance_band():
             assert lo <= d <= hi, f"tier {tier}: {d:.2f} m poza {lo}-{hi}"
 
 def test_speed_at_min_dist_comes_from_closest_frame():
-    stats = EvolutionStats(initial_dist_m=10.0)   # dopasuj do konstruktora
+    stats = EvolutionStats(initial_dist_m=10.0)
 
-    # (odległość, prędkość) — minimum NIE jest ostatnią klatką
-    stats = EvolutionStats(initial_dist_m=10.0, min_dist_m=10.0)
-    frames = [(10.0, 3.0), (6.0, 2.5), (2.0, 1.8), (0.5, 4.2), (3.0, 0.1)]
-    for dist, speed in frames:
-        stats.observe_distance(dist, speed)
+    # (odleglosc, predkosc, predkosc katowa) - minimum NIE jest ostatnia klatka
+    frames = [
+        (10.0, 3.0,  0.4),
+        ( 6.0, 2.5,  1.1),
+        ( 2.0, 1.8,  0.9),
+        ( 0.5, 4.2, -2.7),   # <- klatka minimum, obrot ujemny
+        ( 3.0, 0.1,  0.05),
+    ]
+    for dist, speed, ang in frames:
+        stats.observe_distance(dist, speed, ang)
 
     assert stats.min_dist_m == pytest.approx(0.5)
     assert stats.speed_at_min_dist == pytest.approx(4.2)
+    assert stats.ang_speed_at_min_dist == pytest.approx(2.7)   # abs()
 
 def test_speed_at_min_dist_untouched_when_never_closer():
     stats = EvolutionStats(initial_dist_m=5.0)
     for dist in (6.0, 7.0, 9.0):
-        stats.observe_distance(dist, 2.0)
+        stats.observe_distance(dist, 2.0, 1.5)
+
+    assert stats.min_dist_m == pytest.approx(5.0)   # zasiew nietkniety
     assert stats.speed_at_min_dist == 0.0
+    assert stats.ang_speed_at_min_dist == 0.0
 
 def test_fresh_stats_have_zero_progress():
     stats = EvolutionStats(initial_dist_m=10.0)

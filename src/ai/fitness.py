@@ -40,6 +40,11 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
             components.kamikaze_penalty = -(FIT_KAMIKAZE_FORFEIT
                                             - FIT_CRASH_FORFEIT) * earned
 
+    elif reason is EndReason.ESCAPE:
+        earned = components.progress + components.discovery
+        components.escape_penalty = -FIT_ESCAPE_FORFEIT * earned
+
+
     return components
 
 def hover_credit(speed: float, ang_speed: float) -> float:

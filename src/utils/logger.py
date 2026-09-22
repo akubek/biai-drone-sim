@@ -15,13 +15,14 @@ HEADERS = [
     "tier","curriculum", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
     "mean_progress", "mean_discovery", "mean_hover", "mean_success",
-    "mean_crash_penalty", "mean_kamikaze_penalty",
+    "mean_crash_penalty", "mean_kamikaze_penalty", "mean_escape_penalty",
     "mean_energy_penalty", "mean_shaping",
     "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
+    "mean_angular_speed",
     "species_count", "best_nodes", "best_conns",
-    "mean_speed_at_target", "n_touched", "mean_max_hover_time",
+    "mean_speed_at_target", "mean_ang_speed_at_target", "n_touched", "mean_max_hover_time",
     "compat_threshold", "rep_dist_min", "rep_dist_med", "rep_dist_max",
 ]
 
@@ -119,6 +120,7 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean(r.components.success for r in episodes), 3), #mean_success
             round(statistics.fmean(r.components.crash_penalty for r in episodes), 3), #mean_crash_penalty
             round(statistics.fmean(r.components.kamikaze_penalty for r in episodes), 3), #mean_kamikaze_penalty
+            round(statistics.fmean(r.components.escape_penalty for r in episodes), 3), #mean_escape_penalty
             round(statistics.fmean(r.components.energy_penalty for r in episodes), 3), #mean_energy_penalty
             round(statistics.fmean(r.components.shaping for r in episodes), 3), #mean_shaping
 
@@ -135,11 +137,13 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean([r.energy for r in episodes]), 4), #mean_energy
             round(statistics.fmean([r.mean_throttle for r in episodes]), 4), #mean_throttle
             round(statistics.fmean([r.min_dist_ratio for r in episodes]), 4), #mean_min_dist_ratio
+            round(statistics.fmean([r.mean_angular_speed for r in episodes]), 4),
 
             len(species.species) if species else 0, #species_count
             len(best_genome.nodes) if best_genome else 0, #best_nodes
             len(best_genome.connections) if best_genome else 0, #best_conns
             round(statistics.fmean([r.speed_at_min_dist for r in touched]), 4) if touched else "", #mean_speed_at_target
+            round(statistics.fmean([r.ang_speed_at_min_dist for r in touched]), 4) if touched else "", #mean_ang_speed_at_target
             len(touched), #n_touched
             round(statistics.fmean([r.max_hover_time_s for r in episodes]), 4), #mean_max_hover_time
             round(species.species_set_config.compatibility_threshold, 4) if species else "",
