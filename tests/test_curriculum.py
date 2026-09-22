@@ -13,9 +13,13 @@ class _State:
         self.current_tier = tier
         self.curriculum_enabled = True
         self.resets = 0
+        self.rotations = 0
 
     def force_scenario_reset(self):
         self.resets += 1
+
+    def force_rotation(self):
+        self.rotations += 1
 
 
 class _Sp:
@@ -30,7 +34,8 @@ class _Species:
 
 
 RULES = {
-    "promote": {"expert_fraction": 0.70, "crash_floor": 0.20, "consecutive": 2},
+    "promote": {"expert_fraction": 0.70, "success_floor": 0.05,
+                "crash_floor": 0.20, "consecutive": 2},
     "demote": {"expert_fraction": 0.25, "consecutive": 2},
     "min_dwell_gens": 20,
     "cooldown_after_demote_gens": 30,
@@ -95,15 +100,15 @@ def test_threshold_scales_with_expert(tmp_path):
 def test_demotion_immediate_promotion_gradual(tmp_path):
     st, sp = _State(3), _Species()
     c = _make(tmp_path, st, _Holdout())
-    _tick(c, 20, sp, 0.10)               # tier 3: prog degradacji 0.175
+    _tick(c, 20, sp, 0.10)
     _tick(c, 30, sp, 0.10)
     assert st.current_tier == 2
-    assert st.resets == 1                # natychmiastowa wymiana map
+    assert (st.resets, st.rotations) == (1, 0)   # degradacja: pelna wymiana
 
     _tick(c, 100, sp, 1.0)
     _tick(c, 110, sp, 1.0)
     assert st.current_tier == 3
-    assert st.resets == 1                # awans NIE resetuje - rotacja przejmuje
+    assert (st.resets, st.rotations) == (1, 1)   # awans: tylko start rotacji
 
 
 def test_stagnation_counters_reset_on_switch(tmp_path):
@@ -130,3 +135,12 @@ def test_cooldown_blocks_promotion_after_demotion(tmp_path):
 
     _tick(c, 65, sp, 1.0)
     assert st.current_tier == 3
+
+def test_production_rules_have_all_keys():
+    import json
+    from pathlib import Path
+
+    real = json.loads(Path("conf/curriculum.json").read_text(encoding="utf-8"))
+    assert set(real) == set(RULES)
+    assert set(real["promote"]) == set(RULES["promote"])
+    assert set(real["demote"]) == set(RULES["demote"])
