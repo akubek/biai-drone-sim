@@ -283,7 +283,7 @@ def step_training_drone(
     drone.update(dt)
     stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
     stats.total_time_alive += dt
-    stats.accumulated_rotation += abs(drone.angular_velocity) * dt
+    stats.accumulated_rotation += abs(drone._angular_vel) * dt
 
     return check_termination(
         drone=drone,
