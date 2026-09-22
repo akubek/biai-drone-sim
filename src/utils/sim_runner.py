@@ -1,7 +1,7 @@
 import math
 import os
 import pickle
-from typing import Any, cast
+from typing import cast
 
 import neat
 import pygame

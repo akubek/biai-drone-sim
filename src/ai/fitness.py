@@ -4,7 +4,6 @@ Separates responsibility: the simulation loop collects facts into EvolutionStats
 this function converts them into points - once, at the end of the episode.
 
 Rewards for progress and hover are integrals over the trajectory so they are accumulated
-in stats.progress_raw / stats.hover_raw during the flight.
 """
 
 from src.config.config import BRAKE_RADIUS

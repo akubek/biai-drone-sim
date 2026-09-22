@@ -5,11 +5,10 @@ import statistics
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import neat
 import pygame
-from matplotlib.pylab import cast
 from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
@@ -108,7 +107,6 @@ def _setup_population(
     population.add_reporter(neat.StatisticsReporter())
     checkpoint_prefix = str(checkpoint_dir / "neat-checkpoint-")
     population.add_reporter(neat.Checkpointer(20, filename_prefix=checkpoint_prefix))
-    #population.add_reporter(AdaptiveThreshold(target=12))
 
     return population, config
 
@@ -229,6 +227,8 @@ def check_termination(
     else:
         stats.hover_time_s = 0.0
         stats.hover_credit_s = 0.0
+        stats.lin_credit_s = 0.0
+        stats.ang_credit_s = 0.0
 
     # stagnation check
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:

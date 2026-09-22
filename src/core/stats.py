@@ -46,8 +46,8 @@ class EpisodeResult:
     mean_angular_speed: float
     speed_at_min_dist: float
     ang_speed_at_min_dist: float
-    max_lin_credit: float
-    max_ang_credit: float
+    max_lin_credit_s: float
+    max_ang_credit_s: float
 
     @property
     def success(self) -> bool:
@@ -71,8 +71,8 @@ class EpisodeResult:
             mean_angular_speed=stats.mean_angular_speed,
             speed_at_min_dist=stats.speed_at_min_dist,
             ang_speed_at_min_dist=stats.ang_speed_at_min_dist,
-            max_lin_credit=stats.max_lin_credit_s,
-            max_ang_credit=stats.max_ang_credit_s,
+            max_lin_credit_s=stats.max_lin_credit_s,
+            max_ang_credit_s=stats.max_ang_credit_s,
         )
 
 @dataclass

@@ -3,8 +3,6 @@ from typing import Any, cast
 import neat
 
 from src.ai.state import TrainingState
-from src.config.config import *
-from src.core.environment import generate_scenarios
 from src.core.stats import EpisodeResult
 
 

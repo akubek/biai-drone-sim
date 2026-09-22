@@ -1,4 +1,7 @@
-import itertools, random, neat
+import itertools
+import random
+
+import neat
 
 config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                      neat.DefaultSpeciesSet, neat.DefaultStagnation,
