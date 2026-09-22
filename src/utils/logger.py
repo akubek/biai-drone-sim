@@ -16,7 +16,7 @@ HEADERS = [
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
     "mean_progress", "mean_discovery", "mean_hover", "mean_success",
     "mean_crash_penalty", "mean_kamikaze_penalty", "mean_escape_penalty",
-    "mean_energy_penalty", "mean_shaping",
+    "mean_energy_penalty", "mean_shaping", "mean_braking",
     "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
@@ -124,6 +124,7 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean(r.components.escape_penalty for r in episodes), 3), #mean_escape_penalty
             round(statistics.fmean(r.components.energy_penalty for r in episodes), 3), #mean_energy_penalty
             round(statistics.fmean(r.components.shaping for r in episodes), 3), #mean_shaping
+            round(statistics.fmean(r.components.braking for r in episodes), 4), #mean_braking
 
             round(len(successes) / n, 4), #success_rate
             getattr(getattr(self, "holdout", None), "last_overall_success", ""), #holdout_success_rate

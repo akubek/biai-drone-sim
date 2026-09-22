@@ -10,6 +10,7 @@ from src.config.config import BRAKE_RADIUS
 from src.config.evolution import *
 from src.config.physics import SAFE_CRASH_SPEED_M_S
 from src.config.rewards import *
+from src.core import stats
 from src.core.stats import EndReason, EvolutionStats, FitnessComponents
 
 
@@ -33,8 +34,11 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
     )
     components.energy_penalty = -FIT_W_ENERGY * stats.mean_throttle
 
-    if stats.min_dist_m < BRAKE_RADIUS:
-        closeness = 1.0 - stats.min_dist_m / BRAKE_RADIUS
+    reach = min(BRAKE_RADIUS, stats.initial_dist_m)
+    approached = stats.min_dist_m < stats.initial_dist_m
+
+    if approached and stats.min_dist_m < reach:
+        closeness = 1.0 - stats.min_dist_m / reach
         brake_lin = ramp(stats.speed_at_min_dist, HOVER_MAX_SPEED_M_S, V_REF)
         brake_ang = ramp(stats.ang_speed_at_min_dist, HOVER_MAX_ANGULAR_VEL, W_REF)
         components.braking = FIT_W_BRAKING * closeness * brake_lin * brake_ang
