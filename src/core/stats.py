@@ -41,6 +41,7 @@ class EpisodeResult:
     energy: float
     touched_target: bool
     mean_throttle: float
+    speed_at_min_dist: float
 
     @property
     def success(self) -> bool:
@@ -61,6 +62,7 @@ class EpisodeResult:
             energy=stats.energy_raw / max_energy if max_energy > 0 else 0.0,
             touched_target=stats.has_touched_target,
             mean_throttle=stats.mean_throttle,
+            speed_at_min_dist=stats.speed_at_min_dist,
         )
 
 @dataclass
@@ -69,7 +71,7 @@ class EvolutionStats:
     initial_dist_m: float = 0.0
     min_dist_m: float = 0.0
     max_allowed_escape_dist_m: float = 0.0
-    hover_time: float = 0.0
+    hover_time_s: float = 0.0
     last_stagnation_dist_m: float = 0.0
     time_without_progress: float = 0.0
     total_time_alive: float = 0.0
@@ -78,8 +80,14 @@ class EvolutionStats:
     accumulated_rotation: float = 0.0
     has_touched_target: bool = False
     crash_speed: float = 0.0
-
+    speed_at_min_dist: float = 0.0
+    hover_credit_s: float = 0.0
+    max_hover_credit_s: float = 0.0
     spinout_time: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.min_dist_m <= 0.0:
+            self.min_dist_m = self.initial_dist_m
 
     @property
     def mean_throttle(self) -> float:
@@ -91,3 +99,8 @@ class EvolutionStats:
         """Average |omega| over the entire flight [rad/s]. Captures spinout, slow rotation, and wobbling."""
         return (self.accumulated_rotation / self.total_time_alive
                 if self.total_time_alive > 0 else 0.0)
+
+    def observe_distance(self, dist_m: float, speed_m_s: float) -> None:
+        if dist_m < self.min_dist_m:
+            self.min_dist_m = dist_m
+            self.speed_at_min_dist = speed_m_s

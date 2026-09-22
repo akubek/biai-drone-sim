@@ -208,3 +208,26 @@ def test_tier_distance_band():
             d = math.hypot(s.target_px[0] - s.start_px[0],
                            s.target_px[1] - s.start_px[1]) / PPM
             assert lo <= d <= hi, f"tier {tier}: {d:.2f} m poza {lo}-{hi}"
+
+def test_speed_at_min_dist_comes_from_closest_frame():
+    stats = EvolutionStats(initial_dist_m=10.0)   # dopasuj do konstruktora
+
+    # (odległość, prędkość) — minimum NIE jest ostatnią klatką
+    stats = EvolutionStats(initial_dist_m=10.0, min_dist_m=10.0)
+    frames = [(10.0, 3.0), (6.0, 2.5), (2.0, 1.8), (0.5, 4.2), (3.0, 0.1)]
+    for dist, speed in frames:
+        stats.observe_distance(dist, speed)
+
+    assert stats.min_dist_m == pytest.approx(0.5)
+    assert stats.speed_at_min_dist == pytest.approx(4.2)
+
+def test_speed_at_min_dist_untouched_when_never_closer():
+    stats = EvolutionStats(initial_dist_m=5.0)
+    for dist in (6.0, 7.0, 9.0):
+        stats.observe_distance(dist, 2.0)
+    assert stats.speed_at_min_dist == 0.0
+
+def test_fresh_stats_have_zero_progress():
+    stats = EvolutionStats(initial_dist_m=10.0)
+    assert stats.min_dist_m == pytest.approx(10.0)
+    # świeży epizod = zerowy postęp, nigdy pełny

@@ -6,8 +6,8 @@ i.e., what is seen in the zero-th generation.
 
 | parameter | value |
 |---|---|
-| date | 2026-09-21 23:48 |
-| commit | 1d00853 |
+| date | 2026-09-22 14:45 |
+| commit | 4c13a69 |
 | arch | cascade |
 | net_type | feedforward |
 | seed | 42 |

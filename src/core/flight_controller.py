@@ -2,6 +2,7 @@ import math
 
 from src.core.drone import Drone
 
+
 class FlightController:
     """Low level PID controller converting desired flight vector to motor thrusts."""
     

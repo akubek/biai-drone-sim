@@ -20,6 +20,7 @@ HEADERS = [
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
     "mean_time_to_target", "mean_energy", "mean_throttle", "mean_min_dist_ratio",
     "species_count", "best_nodes", "best_conns",
+    "mean_speed_at_target", "n_touched", "mean_max_hover_time"
 ]
 
 
@@ -71,6 +72,7 @@ class CSVTrainingReporter(BaseReporter):
         successes = [r for r in episodes if r.success]
 
         exp = getattr(self.state, "exp_config", {})
+        touched = [r for r in episodes if r.touched_target]
 
         row = [
             self.run_id,    #run_id
@@ -121,6 +123,9 @@ class CSVTrainingReporter(BaseReporter):
             len(species.species) if species else 0, #species_count
             len(best_genome.nodes) if best_genome else 0, #best_nodes
             len(best_genome.connections) if best_genome else 0, #best_conns
+            round(statistics.fmean([r.speed_at_min_dist for r in touched]), 4) if touched else "", #mean_speed_at_target
+            len(touched), #n_touched
+            round(statistics.fmean([r.max_hover_time_s for r in episodes]), 3), #mean_max_hover_time
         ]
 
         assert len(row) == len(HEADERS), \

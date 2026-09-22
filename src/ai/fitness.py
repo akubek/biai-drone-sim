@@ -23,7 +23,7 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
         progress_ratio = 0.0
     progress_ratio = max(0.0, min(1.0, progress_ratio))
 
-    hover_ratio = min(stats.max_hover_time_achieved / HOVER_REQUIRED_SEC, 1.0)
+    hover_ratio = min(stats.max_hover_credit_s  / HOVER_REQUIRED_SEC, 1.0)
 
     components = FitnessComponents(
         progress=FIT_W_PROGRESS * progress_ratio,
@@ -41,3 +41,12 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
                                             - FIT_CRASH_FORFEIT) * earned
 
     return components
+
+def hover_credit(speed: float, ang_speed: float) -> float:
+    return _ramp(speed, HOVER_MAX_SPEED_M_S, V_REF) \
+         * _ramp(abs(ang_speed), HOVER_MAX_ANGULAR_VEL, W_REF)
+
+def _ramp(x: float, lo: float, hi: float) -> float:
+    if x <= lo:  return 1.0
+    if x >= hi:  return 0.0
+    return (hi - x) / (hi - lo)

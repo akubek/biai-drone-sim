@@ -14,7 +14,7 @@ from neat.nn import FeedForwardNetwork
 
 from src.ai.evaluator import CurriculumParallelEvaluator
 from src.ai.expert import HardcodedBrain
-from src.ai.fitness import compute_fitness
+from src.ai.fitness import compute_fitness, hover_credit
 from src.ai.holdout import HoldoutReporter
 from src.ai.state import TrainingState
 from src.config.config import *
@@ -172,7 +172,6 @@ def check_termination(
     ) -> EndReason | None:
     """Calculates fitness and returns the reason for the end of the episode or none if the episode (flight) is still ongoing."""
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
-    stats.min_dist_m = min(stats.min_dist_m, dist_m)
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
@@ -184,7 +183,7 @@ def check_termination(
         if stats.spinout_time > MAX_ALLOWED_SPINOUT_TIME:
             return EndReason.SPINOUT
     else:
-        stats.spinout_time = 0
+        stats.spinout_time = 0.0
 
     # stagnation check
     if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
@@ -200,7 +199,7 @@ def check_termination(
 
     # target check
     if dist_m < (TARGET_SIZE_PX / PPM):
-        stats.time_without_progress = 0  # reset stagnation time
+        stats.time_without_progress = 0.0  # reset stagnation time
         stats.has_touched_target = True
 
         speed = math.hypot(drone._vel_x, drone._vel_y)
@@ -208,18 +207,23 @@ def check_termination(
                      and abs(drone._angular_vel) <= HOVER_MAX_ANGULAR_VEL)
 
         if is_stable:
-            stats.hover_time += dt
-            stats.max_hover_time_achieved = max(stats.max_hover_time_achieved, stats.hover_time)
+            stats.hover_time_s += dt
+            stats.max_hover_time_achieved = max(stats.max_hover_time_achieved, stats.hover_time_s)
 
             # hover success check
-            if stats.hover_time >= HOVER_REQUIRED_SEC:
+            if stats.hover_time_s >= HOVER_REQUIRED_SEC:
                 return EndReason.SUCCESS
         # reset hover time if not stable
         else:
-            stats.hover_time = 0
+            stats.hover_time_s = 0.0
+
+        stats.hover_credit_s += dt * hover_credit(speed, abs(drone._angular_vel))
+        stats.max_hover_credit_s = max(stats.max_hover_credit_s,
+                                   stats.hover_credit_s)
     # reset hover time if not at target
     else:
-        stats.hover_time = 0
+        stats.hover_time_s = 0.0
+        stats.hover_credit_s = 0.0
 
     # stagnation check
     if stats.time_without_progress > STAGNATION_LIMIT_SEC:
@@ -284,6 +288,8 @@ def step_training_drone(
     stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
     stats.total_time_alive += dt
     stats.accumulated_rotation += abs(drone._angular_vel) * dt
+    dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1]) # TODO: maybe not important - we calculate dist_m in check termination as well.
+    stats.observe_distance(dist_m, math.hypot(drone._vel_x, drone._vel_y))
 
     return check_termination(
         drone=drone,

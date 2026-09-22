@@ -9,7 +9,6 @@ import pygame
 from src.config.config import (
     GRID_SIZE_M,
     MAP_MARGIN_PX,
-    MIN_SPAWN_DIST_M,
     PPM,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
