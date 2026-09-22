@@ -6,6 +6,8 @@ FIT_W_PROGRESS = 1.0      # za zamkniety ulamek dystansu do celu
 FIT_W_DISCOVERY = 0.5     # jednorazowo za dotkniecie strefy celu
 FIT_W_HOVER = 1.0         # za ulamek wymaganego czasu zawisu
 FIT_W_SUCCESS = 2.0       # za ukonczenie zadania
-FIT_W_CRASH = 0.3         # kara za kolizje
-FIT_W_KAMIKAZE = 0.3      # dodatkowa kara za uderzenie z predkoscia
+FIT_CRASH_FORFEIT = 0.5         # kara za kolizje (ułamek zdobytych punktów ktory zostaje odebrany)
+FIT_KAMIKAZE_FORFEIT = 0.8      # dodatkowa kara za uderzenie z predkoscia (ułamek zdobytych punktów ktory zostaje odebrany)
 FIT_W_ENERGY = 0.0        # kara za zuzycie energii
+
+assert 0.0 <= FIT_CRASH_FORFEIT < FIT_KAMIKAZE_FORFEIT < 1.0

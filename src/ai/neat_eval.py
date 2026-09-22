@@ -172,6 +172,7 @@ def check_termination(
     ) -> EndReason | None:
     """Calculates fitness and returns the reason for the end of the episode or none if the episode (flight) is still ongoing."""
     dist_m = math.hypot(drone._x - target_m[0], drone._y - target_m[1])
+    stats.min_dist_m = min(stats.min_dist_m, dist_m)
 
     # escape early check
     if dist_m > stats.max_allowed_escape_dist_m:
@@ -185,8 +186,6 @@ def check_termination(
     else:
         stats.spinout_time = 0
 
-    stats.min_dist_m = min(stats.min_dist_m, dist_m)
-    
     # stagnation check
     if (stats.last_stagnation_dist_m - dist_m) > FIT_STAGNATION_DISTANCE_LIMIT_M:
         stats.time_without_progress = 0.0
@@ -284,6 +283,7 @@ def step_training_drone(
     drone.update(dt)
     stats.energy_raw += (drone.actual_l_thrust + drone.actual_r_thrust) * dt
     stats.total_time_alive += dt
+    stats.accumulated_rotation += abs(drone.angular_velocity) * dt
 
     return check_termination(
         drone=drone,

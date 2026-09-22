@@ -75,6 +75,7 @@ class EvolutionStats:
     total_time_alive: float = 0.0
     energy_raw: float = 0.0
     max_hover_time_achieved: float = 0.0
+    accumulated_rotation: float = 0.0
     has_touched_target: bool = False
     crash_speed: float = 0.0
 
@@ -84,4 +85,9 @@ class EvolutionStats:
     def mean_throttle(self) -> float:
         """Mean throttle as a continuous value between 0 and 1, independent of episode length."""
         return (self.energy_raw / (2.0 * self.total_time_alive)
+                if self.total_time_alive > 0 else 0.0)
+    @property
+    def mean_angular_speed(self) -> float:
+        """Average |omega| over the entire flight [rad/s]. Captures spinout, slow rotation, and wobbling."""
+        return (self.accumulated_rotation / self.total_time_alive
                 if self.total_time_alive > 0 else 0.0)
