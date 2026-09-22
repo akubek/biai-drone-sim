@@ -9,8 +9,17 @@ Rewards for progress and hover are integrals over the trajectory so they are acc
 from src.config.config import BRAKE_RADIUS
 from src.config.evolution import *
 from src.config.physics import SAFE_CRASH_SPEED_M_S
-from src.config.rewards import *
-from src.core import stats
+from src.config.rewards import (
+    FIT_CRASH_FORFEIT,
+    FIT_ESCAPE_FORFEIT,
+    FIT_KAMIKAZE_FORFEIT,
+    FIT_W_BRAKING,
+    FIT_W_DISCOVERY,
+    FIT_W_ENERGY,
+    FIT_W_HOVER,
+    FIT_W_PROGRESS,
+    FIT_W_SUCCESS,
+)
 from src.core.stats import EndReason, EvolutionStats, FitnessComponents
 
 
@@ -53,10 +62,7 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
 
     elif reason is EndReason.ESCAPE:
         components.escape_penalty = -FIT_ESCAPE_FORFEIT * earned
-
-    
-
-
+        
     return components
 
 def hover_credit(speed: float, ang_speed: float) -> float:

@@ -14,7 +14,11 @@ from src.config.config import (
     SCREEN_WIDTH,
 )
 from src.core.drone import Drone
-from src.core.environment import TIERS, generate_scenarios, generate_start_and_target_in_band
+from src.core.environment import (
+    TIERS,
+    generate_scenarios,
+    generate_start_and_target_in_band,
+)
 from src.core.map_generator import _dist_point_to_segment_m, generate_grid_obstacles
 from src.core.stats import EndReason, EvolutionStats
 

@@ -1,4 +1,9 @@
-from src.core.environment import TIERS, Scenario, generate_scenario_for_tier, generate_scenarios
+from src.core.environment import (
+    TIERS,
+    Scenario,
+    generate_scenario_for_tier,
+    generate_scenarios,
+)
 from src.core.stats import EpisodeResult
 
 
