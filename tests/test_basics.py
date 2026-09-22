@@ -1,3 +1,4 @@
+import math
 import random
 
 import neat
@@ -12,6 +13,7 @@ from src.config.config import (
     SCREEN_WIDTH,
 )
 from src.core.drone import Drone
+from src.core.environment import TIERS, generate_scenarios
 from src.core.map_generator import generate_grid_obstacles
 from src.core.stats import EndReason, EvolutionStats
 
@@ -189,3 +191,20 @@ def test_hovering_throttle_matches_base_hover():
 
     throttle = stats.energy_raw / (2.0 * stats.total_time_alive)
     assert abs(throttle - hover) < 0.01, f"throttle {throttle:.4f} vs hover {hover:.4f}"
+
+def test_tier_controls_obstacle_count():
+    """Parametr tier musi docierac do generatora, nie byc po cichu ignorowany."""
+    for tier, spec in TIERS.items():
+        scenarios = generate_scenarios(count=5, tier=tier)
+        assert all(len(s.obstacles_px) == spec["obstacles"] for s in scenarios)
+        assert all(s.tier == tier for s in scenarios)
+
+
+def test_tier_distance_band():
+    """Dystans start-cel musi miescic sie w pasmie zdefiniowanym dla poziomu."""
+    for tier, spec in TIERS.items():
+        lo, hi = spec["dist_m"]
+        for s in generate_scenarios(count=10, tier=tier):
+            d = math.hypot(s.target_px[0] - s.start_px[0],
+                           s.target_px[1] - s.start_px[1]) / PPM
+            assert lo <= d <= hi, f"tier {tier}: {d:.2f} m poza {lo}-{hi}"

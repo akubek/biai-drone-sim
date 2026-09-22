@@ -78,8 +78,25 @@ def parse_and_run() -> None:
             "(overrides the value from the conf/ file)."
     )
 
-    parser.add_argument("--scenarios", type=int, default=None,
-                    help="Number of scenarios (maps) per genome in each generation.")
+    parser.add_argument(
+        "--scenarios",
+        type=int,
+        default=None,
+        help="Number of scenarios (maps) per genome in each generation."
+    )
+
+    parser.add_argument(
+        "--start-tier",
+        type=int,
+        default=None,
+        help="Starting tier for the network. Used in 'train-*' modes."
+    )
+
+    parser.add_argument(
+        "--no-curriculum",
+        action="store_true",
+        help="Disable curriculum learning, learning only at starting tier."
+    )
 
     args = parser.parse_args()
 
@@ -97,8 +114,17 @@ def parse_and_run() -> None:
     seed = args.seed if args.seed is not None else random.randrange(2**31)
     random.seed(seed)
     exp_config["seed"] = seed
-    print(f"SEED: {seed}")
+    print(f"SEED: {seed}" )
     exp_config["net_type"] = args.net_type
+    if args.start_tier is not None:
+        exp_config["start_tier"] = args.start_tier
+    if args.no_curriculum:
+        exp_config["curriculum"] = False
+
+    exp_config.setdefault("start_tier", 1)
+    exp_config.setdefault("curriculum", True)
+    
+    print(f"TIER: {exp_config['start_tier']} | CURRICULUM: {exp_config['curriculum']}")
 
     # --- Determine the path to the config file (according to the new structure) ---
     local_dir = os.path.dirname(__file__)

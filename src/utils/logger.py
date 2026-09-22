@@ -11,7 +11,7 @@ from src.core.stats import EndReason, EpisodeResult
 HEADERS = [
     "run_id", "seed", "arch", "net_type", "training_mode",
     "generation", "evaluations_total", "scenarios_per_genome", "episodes_this_gen",  "wall_time_s",
-    "stage", "num_obstacles", "expert_weight",
+    "tier","curriculum", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
     "mean_progress", "mean_discovery", "mean_hover", "mean_success",
     "mean_crash_penalty", "mean_kamikaze_penalty",
@@ -85,8 +85,9 @@ class CSVTrainingReporter(BaseReporter):
             len(episodes),    #episodes_this_gen
             round(time.time() - self._gen_start, 2), #wall_time_s
 
-            getattr(self.state, "current_stage", ""), #stage
-            getattr(self.state, "num_obstacles", ""), #num_obstacles
+            self.state.current_tier, #tier
+            self.state.curriculum_enabled, #curriculum
+            self.state.num_obstacles, #num_obstacles
             round(self.state.current_help_weight, 3), #expert_weight
 
             round(max(fitnesses), 4), #best_fitness

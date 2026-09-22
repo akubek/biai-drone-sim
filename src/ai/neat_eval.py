@@ -366,7 +366,7 @@ def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: 
 
     scenarios = generate_scenarios(
         count=global_state.scenarios_per_genome,
-        num_obstacles=global_state.num_obstacles,
+        tier=global_state.current_tier,
     )
 
     episode_results: dict[int, list[EpisodeResult]] = {g.key: [] for _, g in genomes}

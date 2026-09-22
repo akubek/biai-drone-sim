@@ -91,24 +91,9 @@ def generate_start_and_target(width: int, height: int, margin: int, min_dist: fl
             return start_pos, target_pos
 
 
-def generate_scenarios(count: int, num_obstacles: int) -> list[Scenario]:
-    """Generates K random scenarios. The same set is given to all genomes in a generation."""
-    scenarios = []
-    for _ in range(count):
-        start_px, target_px = generate_start_and_target(
-            SCREEN_WIDTH, SCREEN_HEIGHT, MAP_MARGIN_PX, MIN_SPAWN_DIST_M
-        )
-        obstacles = generate_grid_obstacles(
-            SCREEN_WIDTH, SCREEN_HEIGHT, start_px, target_px,
-            GRID_SIZE_M, num_obstacles, PPM
-        )
-        scenarios.append(Scenario(
-            start_px=start_px,
-            target_px=target_px,
-            obstacles_px=tuple((r.x, r.y, r.width, r.height) for r in obstacles),
-            tier=0,
-        ))
-    return scenarios
+def generate_scenarios(count: int, tier: int) -> list[Scenario]:
+    """Generates K random scenarios in a given tier. The same set is given to all genomes in a generation."""
+    return [generate_scenario_for_tier(tier) for _ in range(count)]
 
 def load_holdout(path: str = "data/holdout.json") -> list[Scenario]:
     blob = json.loads(Path(path).read_text(encoding="utf-8"))

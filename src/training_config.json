@@ -1,7 +1,8 @@
 {
     "_comment": "Modes: 0=Pure NEAT, 1=Linear Expert, 2=Blind Curriculum, 3=Full Curriculum",
     "training_mode": 0,
-    "target_obstacles": 3,
+    "start_tier": 1,
+    "curriculum": true,
     "max_help_gens": 50,
     "start_weight": 0.85,
     "success_threshold_stage1": 75.0,

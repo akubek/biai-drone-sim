@@ -19,7 +19,7 @@ class CurriculumParallelEvaluator(neat.ParallelEvaluator):
 
         scenarios = generate_scenarios(
             count=self.state.scenarios_per_genome,
-            num_obstacles=self.state.num_obstacles
+            tier=self.state.current_tier
         )
         cast(Any, config).shared_scenarios = scenarios
         

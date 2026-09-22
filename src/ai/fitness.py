@@ -35,9 +35,9 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
 
     if reason is EndReason.CRASH:
         earned = components.progress + components.discovery
+        components.crash_penalty = -FIT_CRASH_FORFEIT * earned
         if stats.crash_speed > SAFE_CRASH_SPEED_M_S:
-            components.kamikaze_penalty = -FIT_KAMIKAZE_FORFEIT * earned
-        else:
-            components.kamikaze_penalty = -FIT_CRASH_FORFEIT * earned
+            components.kamikaze_penalty = -(FIT_KAMIKAZE_FORFEIT
+                                            - FIT_CRASH_FORFEIT) * earned
 
     return components
