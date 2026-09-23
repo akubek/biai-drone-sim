@@ -1,11 +1,11 @@
 import csv
 import json
 import os
-from pathlib import Path
 import pickle
 import statistics
 from collections import defaultdict
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from neat.reporting import BaseReporter
@@ -34,7 +34,7 @@ class HoldoutReporter(BaseReporter):
         self.filename = os.path.join(folder, "holdout_log.csv")
         self.last_by_tier: dict[int, dict] = {} 
         self.top_k = top_k
-        self._best_score = -1.0
+        self._best_score = 0.0
         self.run_dir = folder
         with open(self.filename, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(HEADERS)
