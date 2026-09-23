@@ -5,6 +5,7 @@ import random
 import sys
 
 from src.ai import neat_eval
+from src.core.environment import select_ladder
 from src.utils import manual_flight, sim_runner
 
 
@@ -104,6 +105,11 @@ def parse_and_run() -> None:
         default=20,
         help="Number of generations after which scenarios are refreshed."
     )
+    parser.add_argument("--ladder",
+        choices=["v1", "v2"],
+        default="v1",
+        help="Variant of the difficulty ladder.",
+        )
 
     args = parser.parse_args()
 
@@ -127,6 +133,9 @@ def parse_and_run() -> None:
         exp_config["start_tier"] = args.start_tier
     if args.no_curriculum:
         exp_config["curriculum"] = False
+
+    exp_config["ladder"] = args.ladder
+    select_ladder(exp_config.get("ladder", "v1"))
 
     exp_config.setdefault("start_tier", 1)
     exp_config.setdefault("curriculum", True)

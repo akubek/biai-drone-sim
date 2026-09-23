@@ -33,12 +33,13 @@ def create_run_dir(arch: str, exp_config: dict, config_path: str) -> Path:
     prefix = "smoke_" if exp_config.get("pop_size") is not None else ""
     run_dir = Path("results") / f"{prefix}{stamp}_{arch}_mode{mode}_seed{seed}"
     (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
+    ladder = exp_config.get("ladder", "v1")
 
     # Kopie konfiguracji - treść (mogą się zmieniać)
     shutil.copy(config_path, run_dir / "conf_neat.txt")
     shutil.copy(Path("src") / "training_config.json", run_dir / "training_config.json")
     shutil.copy(Path("conf") / "curriculum.json", run_dir / "curriculum.json")
-    shutil.copy(Path("data") / "baselines.json", run_dir / "baselines.json")
+    shutil.copy(Path("data") / f"baselines_{ladder}.json", run_dir / "baselines.json")
     for name in ("rewards.py", "evolution.py", "physics.py", "config.py"):
         shutil.copy(Path("src") / "config" / name, run_dir / f"config_{name}")
 

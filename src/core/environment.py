@@ -16,14 +16,40 @@ from src.config.config import (
 from src.core.map_generator import generate_grid_obstacles
 
 # Difficulty tiers for scenario generation. Each tier specifies a distance band and the number of obstacles.
-TIERS: dict[int, dict] = {
-    1: {"dist_m": (0.5, 1.0), "obstacles": 0, "description": "target close, empty map"},
-    2: {"dist_m": (1.0, 2.0), "obstacles": 0, "description": "medium distance, empty map"},
-    3: {"dist_m": (2.0, 3.0), "obstacles": 1, "description": "one obstacle"},
-    4: {"dist_m": (2.0, 4.0), "obstacles": 2, "description": "two obstacles"},
-    5: {"dist_m": (2.0, 4.0), "obstacles": 3, "description": "three obstacles"},
-    6: {"dist_m": (2.0, 4.0), "obstacles": 5, "description": "five obstacles"},
+TIERS_V1: dict[int, dict] = {
+    1: {"dist_m": (0.5, 1.0), "obstacles": 0, "description": "blisko, pusta mapa"},
+    2: {"dist_m": (1.0, 2.0), "obstacles": 0, "description": "srednio, pusta mapa"},
+    3: {"dist_m": (2.0, 3.0), "obstacles": 1, "description": "pierwsza przeszkoda"},
+    4: {"dist_m": (2.0, 4.0), "obstacles": 2, "description": "dwie przeszkody"},
+    5: {"dist_m": (2.0, 4.0), "obstacles": 3, "description": "trzy przeszkody"},
+    6: {"dist_m": (2.0, 4.0), "obstacles": 5, "description": "maksimum (5)"},
 }
+
+# Obstacles present from the first tier - sensors have selective pressure 
+# from the beginning. Between subsequent tiers, only one parameter changes: 
+# 1->3 distance increases, 3->5 number of obstacles increases.
+TIERS_V2: dict[int, dict] = {
+    1: {"dist_m": (0.5, 1.0), "obstacles": 1, "description": "bardzo blisko, 1 przeszkoda obok trasy"},
+    2: {"dist_m": (1.0, 2.0), "obstacles": 1, "description": "srednio, 1 przeszkoda"},
+    3: {"dist_m": (2.0, 3.0), "obstacles": 1, "description": "daleko, przeszkoda moze trafic na trase"},
+    4: {"dist_m": (2.0, 3.0), "obstacles": 2, "description": "2 przeszkody"},
+    5: {"dist_m": (2.0, 3.0), "obstacles": 3, "description": "3 przeszkody"},
+}
+
+LADDERS = {"v1": TIERS_V1, "v2": TIERS_V2}
+TIERS: dict[int, dict] = dict(TIERS_V1)
+
+def select_ladder(name: str) -> None:
+    """Podmienia aktywna drabinke W MIEJSCU.
+
+    Mutacja zamiast przypisania jest konieczna: modulu importujace
+    `from src.core.environment import TIERS` trzymaja referencje do tego
+    slownika, wiec przypisanie nowego obiektu byloby dla nich niewidoczne.
+    """
+    if name not in LADDERS:
+        raise ValueError(f"nieznana drabinka '{name}', dostepne: {sorted(LADDERS)}")
+    TIERS.clear()
+    TIERS.update(LADDERS[name])
 
 @dataclass(frozen=True)
 class Scenario:

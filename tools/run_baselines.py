@@ -35,7 +35,7 @@ import neat
 
 from src.ai.expert import HardcodedBrain
 from src.ai.neat_eval import _apply_net_type, _run_episode
-from src.core.environment import load_holdout
+from src.core.environment import load_holdout, select_ladder
 from src.core.stats import EndReason, EpisodeResult
 
 # help_weight=1.0 -> step_training_drone takes ONLY the expert's output,
@@ -191,10 +191,17 @@ def main() -> None:
     parser.add_argument("--genomes", type=int, default=20,
                         help="Number of random genomes for the floor (averaged).")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--holdout", default="data/holdout.json")
-    parser.add_argument("--out", default="docs/baselines.md")
-    parser.add_argument("--out-json", default="data/baselines.json")
+    parser.add_argument("--holdout", default=None)
+    parser.add_argument("--ladder", choices=["v1", "v2"], default="v1")
+    parser.add_argument("--out", default=None)
+    parser.add_argument("--out-json", default=None)
     args = parser.parse_args()
+
+    select_ladder(args.ladder)
+
+    holdout_path = args.holdout or f"data/holdout_{args.ladder}.json"
+    out_md = Path(args.out or f"docs/baselines_{args.ladder}.md")
+    out_json = Path(args.out_json or f"data/baselines_{args.ladder}.json")
 
     import random
     random.seed(args.seed)
@@ -205,7 +212,7 @@ def main() -> None:
     _apply_net_type(config, args.net_type)
     cast(Any, config).use_cascade = (args.arch == "cascade")
 
-    scenarios = load_holdout(args.holdout)
+    scenarios = load_holdout(holdout_path)
     print(f"holdout: {len(scenarios)} scenarios, "
           f"{len({s.tier for s in scenarios})} tiers")
 
@@ -239,14 +246,15 @@ def main() -> None:
         "arch": args.arch,
         "net_type": args.net_type,
         "seed": args.seed,
-        "holdout": args.holdout,
+        "ladder": args.ladder,
+        "holdout": holdout_path,
         "scenarios": len(scenarios),
         "genomes (floor)": len(random_genomes),
     }
-    write_markdown(Path(args.out), expert_stats, random_stats, meta, problems)
-    print(f"\nsaved to {args.out}")
-    write_baselines_json(Path(args.out_json), expert_stats, meta)
-    print(f"\nsaved to {args.out_json}")
+    write_markdown(out_md, expert_stats, random_stats, meta, problems)
+    print(f"\nsaved to {out_md}")
+    write_baselines_json(out_json, expert_stats, meta)
+    print(f"\nsaved to {out_json}")
 
 
 if __name__ == "__main__":

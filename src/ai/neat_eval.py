@@ -353,18 +353,19 @@ def _run_episode(
         max_episode_time_s=SIMULATION_TIME,
     )
 
-def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tuple[float, EpisodeResult]:
+def _eval_genome_headless(genome: neat.DefaultGenome, config: neat.Config) -> tuple[float, list[EpisodeResult]]:
     """Single simulation of one drone for a single CPU core."""
     expert = HardcodedBrain()
     help_weight = getattr(config, 'current_help_weight', 0.0)
     scenarios: list[Scenario] = getattr(config, "shared_scenarios", [] )
 
-    result = [
+    results = [
         _run_episode(genome, config, sc, expert, help_weight)
         for sc in scenarios
     ]
 
-    return cast(Any, genome).fitness, result
+    fitness = statistics.fmean(r.fitness for r in results) if results else 0.0
+    return fitness, results
 
 
 def _eval_genomes_visual(genomes: list[tuple[int, neat.DefaultGenome]], config: neat.Config) -> None:
@@ -533,9 +534,9 @@ def run_neat_visual(
         net_type=exp_config.get("net_type", "feedforward"),
         use_cascade=use_cascade,
     )
-
+    ladder = exp_config.get("ladder", "v1")
     holdout = HoldoutReporter(
-        scenarios=load_holdout(),
+        scenarios=load_holdout(f"data/holdout_{ladder}.json"),
         run_episode_fn=_run_episode,
         config=config,
         folder=str(run_dir),
@@ -550,7 +551,7 @@ def run_neat_visual(
     )
     reporter.holdout = holdout
     population.add_reporter(reporter)
-    population.add_reporter(CurriculumController(global_state, holdout))
+    population.add_reporter(CurriculumController(global_state, holdout, baselines_path=f"data/baselines_{ladder}.json"))
 
     print("Starting evolution in VISUAL mode...")
     
@@ -592,16 +593,16 @@ def run_neat_headless(
         use_cascade=use_cascade,
         net_type=exp_config.get("net_type", "feedforward"),
     )
-
+    ladder = exp_config.get("ladder", "v1")
     holdout = HoldoutReporter(
-        scenarios=load_holdout(),
+        scenarios=load_holdout(f"data/holdout_{ladder}.json"),
         run_episode_fn=_run_episode,
         config=config,
         folder=str(run_dir),
         every=10,
     )
     population.add_reporter(holdout)
-    population.add_reporter(CurriculumController(global_state, holdout))
+    population.add_reporter(CurriculumController(global_state, holdout, baselines_path=f"data/baselines_{ladder}.json"))
 
     reporter = CSVTrainingReporter(
         global_state,
