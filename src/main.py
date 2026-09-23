@@ -205,7 +205,11 @@ def parse_and_run() -> None:
         if not os.path.exists(args.model):
             print(f"ERROR: Model file not found: '{args.model}'")
             sys.exit(1)
-        sim_runner.test_best_drone(config_path, genome_path=args.model)
+        sim_runner.test_best_drone(
+            config_path,
+            genome_path=args.model,
+            use_cascade=(args.arch == "cascade")
+        )
 
     elif args.mode == "manual":
         print("MODE: MANUAL (Test physics and controller with keyboard)")
