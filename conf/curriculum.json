@@ -1,6 +1,6 @@
 {
   "promote": {
-    "expert_fraction": 0.70,
+    "expert_fraction": 0.50,
     "success_floor": 0.05,
     "crash_floor": 0.20,
     "consecutive": 2
