@@ -344,7 +344,6 @@ def _run_episode(
         reason = EndReason.TIMEOUT
 
     components = compute_fitness(stats, reason)
-    cast(Any, genome).fitness = components.total
 
     return EpisodeResult.from_stats(
         stats=stats,
