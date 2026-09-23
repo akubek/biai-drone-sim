@@ -21,7 +21,8 @@ class FitnessComponents:
     crash_penalty: float = 0.0        # ujemny
     kamikaze_penalty: float = 0.0     # ujemny
     escape_penalty: float = 0.0       # ujemny
-    energy_penalty: float = 0.0       # ujemny, wlaczany w #21
+    energy_penalty: float = 0.0       # ujemny
+    spinout_penalty: float = 0.0       # ujemny
     shaping: float = 0.0              # wchodzi w #29
     braking: float = 0.0
 
@@ -29,7 +30,8 @@ class FitnessComponents:
     def total(self) -> float:
         return (self.progress + self.discovery + self.hover + self.success
                 + self.crash_penalty + self.kamikaze_penalty
-                + self.escape_penalty + self.energy_penalty + self.shaping + self.braking)
+                + self.escape_penalty + self.energy_penalty + self.spinout_penalty 
+                + self.shaping + self.braking)
 
 @dataclass
 class EpisodeResult:

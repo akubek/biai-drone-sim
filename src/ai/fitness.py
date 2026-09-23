@@ -13,6 +13,7 @@ from src.config.rewards import (
     FIT_CRASH_FORFEIT,
     FIT_ESCAPE_FORFEIT,
     FIT_KAMIKAZE_FORFEIT,
+    FIT_SPINOUT_FORFEIT,
     FIT_W_BRAKING,
     FIT_W_DISCOVERY,
     FIT_W_ENERGY,
@@ -62,6 +63,9 @@ def compute_fitness(stats: EvolutionStats, reason: EndReason) -> FitnessComponen
 
     elif reason is EndReason.ESCAPE:
         components.escape_penalty = -FIT_ESCAPE_FORFEIT * earned
+
+    elif reason is EndReason.SPINOUT:
+            components.spinout_penalty = -FIT_SPINOUT_FORFEIT * earned
         
     return components
 
