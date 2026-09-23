@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+from pathlib import Path
 import pickle
 import statistics
 from collections import defaultdict
@@ -90,9 +91,10 @@ class HoldoutReporter(BaseReporter):
         if self.last_overall_success > self._best_score:
             self._best_score = self.last_overall_success
             stem = f"best_g{self.generation:03d}_score{self._best_score:.3f}"
-            with open(os.path.join(self.run_dir, f"{stem}.pkl"), "wb") as fh:
+            run_dir = Path(self.run_dir)
+            with open(run_dir / f"{stem}.pkl", "wb") as fh:
                 pickle.dump(best_genome_sel, fh)
-            with open(self.run_dir / "best_holdout_meta.json", "w", encoding="utf-8") as fh:
+            with open(run_dir / "best_holdout_meta.json", "w", encoding="utf-8") as fh:
                 json.dump({"generation": self.generation,
                            "score": self._best_score,
                            "per_tier": self.last_by_tier}, fh, indent=2)
