@@ -1,5 +1,7 @@
 import csv
+import json
 import os
+import pickle
 import statistics
 from collections import defaultdict
 from collections.abc import Callable
@@ -31,6 +33,8 @@ class HoldoutReporter(BaseReporter):
         self.filename = os.path.join(folder, "holdout_log.csv")
         self.last_by_tier: dict[int, dict] = {} 
         self.top_k = top_k
+        self._best_score = -1.0
+        self.run_dir = folder
         with open(self.filename, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(HEADERS)
 
@@ -50,6 +54,7 @@ class HoldoutReporter(BaseReporter):
             return
 
         best_by_tier: dict[int, list[EpisodeResult]] = {}
+        best_genome_sel = None  
         best_hits = -1
         for genome in top:
             by_tier: dict[int, list[EpisodeResult]] = defaultdict(list)
@@ -59,6 +64,8 @@ class HoldoutReporter(BaseReporter):
             hits = sum(1 for v in by_tier.values() for r in v if r.success)
             if hits > best_hits:
                 best_hits, best_by_tier = hits, by_tier
+                best_genome_sel = genome  
+                
 
 
         rows = []
@@ -79,3 +86,13 @@ class HoldoutReporter(BaseReporter):
         total = sum(len(v) for v in best_by_tier.values())
         hits = sum(1 for v in best_by_tier.values() for r in v if r.success)
         self.last_overall_success = round(hits / total, 4)
+
+        if self.last_overall_success > self._best_score:
+            self._best_score = self.last_overall_success
+            stem = f"best_g{self.generation:03d}_score{self._best_score:.3f}"
+            with open(os.path.join(self.run_dir, f"{stem}.pkl"), "wb") as fh:
+                pickle.dump(best_genome_sel, fh)
+            with open(self.run_dir / "best_holdout_meta.json", "w", encoding="utf-8") as fh:
+                json.dump({"generation": self.generation,
+                           "score": self._best_score,
+                           "per_tier": self.last_by_tier}, fh, indent=2)

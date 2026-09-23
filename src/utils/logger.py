@@ -15,7 +15,7 @@ HEADERS = [
     "tier", "tier_mix", "curriculum", "num_obstacles", "expert_weight",
     "best_fitness", "mean_fitness", "median_fitness", "std_fitness",
     "mean_progress", "mean_discovery", "mean_hover", "mean_success",
-    "mean_crash_penalty", "mean_kamikaze_penalty", "mean_escape_penalty",
+    "mean_crash_penalty", "mean_kamikaze_penalty", "mean_escape_penalty", "mean_spinout_penalty",
     "mean_energy_penalty", "mean_shaping", "mean_braking",
     "success_rate", "holdout_success_rate", 
     "crash_rate", "escape_rate", "spinout_rate", "stagnation_rate", "timeout_rate",
@@ -123,6 +123,7 @@ class CSVTrainingReporter(BaseReporter):
             round(statistics.fmean(r.components.crash_penalty for r in episodes), 3), #mean_crash_penalty
             round(statistics.fmean(r.components.kamikaze_penalty for r in episodes), 3), #mean_kamikaze_penalty
             round(statistics.fmean(r.components.escape_penalty for r in episodes), 3), #mean_escape_penalty
+            round(statistics.fmean(r.components.spinout_penalty for r in episodes), 3), #mean_spinout_penalty
             round(statistics.fmean(r.components.energy_penalty for r in episodes), 3), #mean_energy_penalty
             round(statistics.fmean(r.components.shaping for r in episodes), 3), #mean_shaping
             round(statistics.fmean(r.components.braking for r in episodes), 4), #mean_braking

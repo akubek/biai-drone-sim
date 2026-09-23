@@ -111,6 +111,13 @@ def parse_and_run() -> None:
         help="Variant of the difficulty ladder.",
         )
 
+    parser.add_argument(
+        "--holdout-every",
+        type=int,
+        default=None,
+        help="Number of generations after which holdout scenarios are evaluated."
+    )
+
     args = parser.parse_args()
 
     # --- LOADING EXPERIMENT CONFIGURATION FROM JSON ---
@@ -161,6 +168,8 @@ def parse_and_run() -> None:
         exp_config["scenarios_per_genome"] = args.scenarios
     if args.pop_size is not None:
         exp_config["pop_size"] = args.pop_size
+    if args.holdout_every is not None:
+        exp_config["holdout_every"] = args.holdout_every
     if args.scenario_refresh is not None:
         exp_config["scenario_refresh"] = args.scenario_refresh
 

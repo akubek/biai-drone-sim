@@ -539,7 +539,7 @@ def run_neat_visual(
         run_episode_fn=_run_episode,
         config=config,
         folder=str(run_dir),
-        every=10,
+        every=exp_config.get("holdout_every", 10),
     )
     population.add_reporter(holdout)
     reporter = CSVTrainingReporter(
@@ -598,7 +598,7 @@ def run_neat_headless(
         run_episode_fn=_run_episode,
         config=config,
         folder=str(run_dir),
-        every=10,
+        every=exp_config.get("holdout_every", 10),
     )
     population.add_reporter(holdout)
     population.add_reporter(CurriculumController(global_state, holdout, baselines_path=f"data/baselines_{ladder}.json"))
