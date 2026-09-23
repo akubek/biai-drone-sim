@@ -2,7 +2,7 @@
   "promote": {
     "expert_fraction": 0.50,
     "success_floor": 0.05,
-    "crash_floor": 0.20,
+    "crash_floor": 0.60,
     "consecutive": 2
   },
   "demote": {
